@@ -6,6 +6,7 @@
    مصدر البيانات المشتركة (Backend) يعمل بثلاث طرق:
    - claude : قاعدة بيانات المشاركة في claude.ai (كل حساب يكتب صفّه فقط: lb/<id>)
    - server : سيرفر خارجي – عرّف window.NQ_SERVER = 'https://...' قبل تحميل هذا الملف (انظر server/)
+   - firebase: قاعدة Firestore مجانية – عرّف window.NQ_FIREBASE = { projectId, apiKey } في firebase-config.js
    - local  : بدون إنترنت – المنافسة بين الطلاب على نفس الجهاز
    يُحمّل هذا الملف قبل app.js، ويستخدم window.NQ وقت التشغيل. */
 (function () {
@@ -204,9 +205,21 @@
   }
 
   /* ================= مصدر البيانات المشتركة ================= */
+  const devId = () => {
+    try { let d = localStorage.getItem('nq_device'); if (!d) { d = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); localStorage.setItem('nq_device', d); } return d; }
+    catch (e) { return 'd' + Date.now().toString(36); }
+  };
   const Backend = {
     mode: 'local', db: null, uid: null, base: '', device: '', cache: null, cacheAt: 0, err: null,
     async init() {
+      const fb = window.NQ_FIREBASE;
+      if (fb && fb.projectId && fb.apiKey) {
+        this.mode = 'firebase';
+        this.base = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(fb.projectId) + '/databases/(default)/documents/lb';
+        this.key = fb.apiKey;
+        this.device = devId();
+        return;
+      }
       if (window.NQ_SERVER) {
         this.mode = 'server'; this.base = String(window.NQ_SERVER).replace(/\/+$/, '');
         try { this.device = localStorage.getItem('nq_device') || ''; if (!this.device) { this.device = 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); localStorage.setItem('nq_device', this.device); } } catch (e) { this.device = 'd' + Date.now(); }
@@ -224,6 +237,13 @@
       try {
         if (this.mode === 'claude') await this.db.doc('lb/' + this.uid).set(body);
         else if (this.mode === 'server') await fetch(this.base + '/api/lb/' + encodeURIComponent(this.device), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        else if (this.mode === 'firebase') {
+          const r = await fetch(this.base + '/' + encodeURIComponent(this.device) + '?key=' + encodeURIComponent(this.key), {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields: { json: { stringValue: JSON.stringify(body) }, updated: { integerValue: String(body.updated) } } })
+          });
+          if (!r.ok) throw { code: 'http_' + r.status };
+        }
         this.err = null;
       } catch (e) { this.err = (e && e.code) || 'network'; }
       this.remote = null;
@@ -239,6 +259,20 @@
         if (this.mode === 'claude') {
           const q = await Promise.race([this.db.collection('lb').get(), new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 10000))]);
           q.docs.forEach(d => { const v = d.data() || {}; Object.values(v.students || {}).forEach(e => out.push(e)); });
+        } else if (this.mode === 'firebase') {
+          let tok = '', pages = 0;
+          do {
+            const r = await fetch(this.base + '?pageSize=300&key=' + encodeURIComponent(this.key) + (tok ? '&pageToken=' + encodeURIComponent(tok) : ''));
+            if (!r.ok) throw { code: 'http_' + r.status };
+            const j = await r.json();
+            (j.documents || []).forEach(doc => {
+              try {
+                const v = JSON.parse(doc.fields && doc.fields.json ? doc.fields.json.stringValue : 'null');
+                if (v && v.students && Date.now() - (v.updated || 0) < 60 * 864e5) Object.values(v.students).forEach(e => out.push(e));
+              } catch (e) { /* مستند تالف */ }
+            });
+            tok = j.nextPageToken || ''; pages++;
+          } while (tok && pages < 10);
         } else if (this.mode === 'server') {
           const r = await fetch(this.base + '/api/lb'); const j = await r.json();
           (j.devices || []).forEach(v => Object.values(v.students || {}).forEach(e => out.push(e)));
@@ -250,7 +284,7 @@
     },
     label() {
       return this.mode === 'claude' ? '🌐 الترتيب يشمل كل الطلاب الذين يستخدمون هذا الرابط'
-        : this.mode === 'server' ? '🌐 الترتيب يشمل كل طلاب المنصة'
+        : this.mode === 'server' || this.mode === 'firebase' ? '🌐 الترتيب يشمل كل طلاب المنصة'
           : '💻 بدون اتصال: الترتيب يشمل الطلاب على هذا الجهاز فقط';
     }
   };
