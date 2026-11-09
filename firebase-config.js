@@ -5,3 +5,5 @@ window.NQ_FIREBASE = {
   apiKey: 'AIzaSyBwnPdI4Q-4cUXK0QsuAiLecI2OtzdUAG8',
   database: 'default'
 };
+// أثناء التجربة على الجهاز (localhost) لا نكتب في قاعدة البيانات الحقيقية إلا مع ?fb=1
+if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) && !/[?&]fb=1\b/.test(location.search)) window.NQ_FIREBASE = null;

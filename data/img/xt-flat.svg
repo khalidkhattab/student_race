@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI,Arial,sans-serif" viewBox="0 0 320 220"><rect width="320" height="220" fill="#fff"/>
+<g stroke="#1c2430" stroke-width="2"><path d="M60 180H290M60 190V20"/></g>
+<text x="292" y="176" font-size="13">t (s)</text><text x="20" y="22" font-size="13">x (m)</text>
+<g font-size="12" fill="#5f6b72" text-anchor="middle"><text x="110" y="198">2</text><text x="160" y="198">4</text><text x="210" y="198">6</text><text x="260" y="198">8</text></g>
+<text x="54" y="94" font-size="12" fill="#5f6b72" text-anchor="end">10</text>
+<path d="M60 90H200" stroke="#e1e4dc" stroke-dasharray="4 4"/>
+<line x1="60" y1="90" x2="270" y2="90" stroke="#0f766e" stroke-width="3.5"/>
+</svg>

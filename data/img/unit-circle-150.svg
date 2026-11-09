@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI,Arial,sans-serif" viewBox="0 0 260 260"><rect width="260" height="260" fill="#fff"/>
+<g stroke="#1c2430" stroke-width="1.5"><path d="M20 130H240M130 240V20"/></g>
+<circle cx="130" cy="130" r="90" fill="none" stroke="#0f766e" stroke-width="2.5"/>
+<line x1="130" y1="130" x2="52" y2="85" stroke="#c2620a" stroke-width="3"/>
+<circle cx="52" cy="85" r="5" fill="#c2620a"/>
+<path d="M160 130A30 30 0 0 0 104 115" fill="none" stroke="#2563eb" stroke-width="2"/>
+<text x="150" y="108" font-size="15" fill="#2563eb" font-weight="700">150°</text>
+<text x="34" y="74" font-size="14" fill="#c2620a" font-weight="700">P</text>
+<g font-size="12" fill="#5f6b72"><text x="224" y="146">1</text><text x="22" y="146">−1</text><text x="136" y="34">1</text><text x="136" y="234">−1</text></g>
+</svg>

@@ -163,9 +163,10 @@
   const deltaTxt = d => d == null ? '<span class="pr-flat">—</span>' : d > 0 ? `<span class="pr-up">▲ ${num(d)}</span>` : d < 0 ? `<span class="pr-down">▼ ${num(-d)}</span>` : '<span class="pr-flat">=</span>';
 
   /* ================= 5) تفاصيل الاختبار ================= */
-  let qIndex = null;
+  let qIndex = null, qIndexN = 0;
   function qById(id) {
-    if (!qIndex) { qIndex = {}; N().SUBJECTS.forEach(s => N().allQuestions(s).forEach(q => { qIndex[q.id] = q; })); }
+    if (!qIndex || qIndexN !== N().SUBJECTS.length) {
+      qIndexN = N().SUBJECTS.length; qIndex = {}; N().SUBJECTS.forEach(s => N().allQuestions(s).forEach(q => { qIndex[q.id] = q; })); }
     return qIndex[id];
   }
   function showDetails(rec) {
@@ -177,9 +178,10 @@
       <div class="pg-row"><h2 id="pxdt">${esc(rec.title)}</h2><button type="button" class="btn ghost small" data-x>إغلاق</button></div>
       <p class="muted" style="margin:0 0 12px">${esc(subjName(rec))} · ${NQ.fmtDate(rec.date)} · ${rec.mode === 'exam' ? 'اختبار' : 'تدريب'} · ${num(rec.pct)}٪ · الوقت ${NQ.fmtTime(rec.secs || 0)}${items.length ? ` · صحيح ${num(right)} من ${num(items.length)}` : ''}</p>
       ${items.length ? `<ol class="px-qs">${items.map(x => `<li class="${x.sc === 1 ? 'ok' : x.sc > 0 ? 'part' : 'no'}">
-          <p>${esc(x.q.q)}</p>
+          <p>${esc(x.q.q)}</p>${NQ.qImg ? NQ.qImg(x.q, true) : ''}
           <small><b>إجابة الطالب:</b> ${esc(NQ.respText(x.q, x.r))}</small>
-          ${x.sc < 1 ? `<small><b>الصحيح:</b> ${esc(NQ.correctText(x.q))}</small>` : ''}</li>`).join('')}</ol>`
+          ${x.sc < 1 ? `<small><b>الصحيح:</b> ${esc(NQ.correctText(x.q))}</small>` : ''}
+          ${x.sc < 1 && x.q.explain ? `<small>💡 ${esc(x.q.explain)}</small>` : ''}</li>`).join('')}</ol>`
         : '<p class="empty">تفاصيل الأسئلة متاحة للاختبارات التي حُلّت بعد تفعيل هذه الميزة فقط.</p>'}
     </div>`;
     ov.onclick = e => { if (e.target === ov || e.target.closest('[data-x]')) ov.remove(); };
@@ -403,6 +405,7 @@
   }
   function merge(t, src) {
     ['msg', 'limits'].forEach(k => { if (t[k] == null && src[k] != null) t[k] = src[k]; });
+    if (src.srs) { t.srs = t.srs || {}; Object.entries(src.srs).forEach(([id, e]) => { const m = t.srs[id]; if (!m || (e && e.d > m.d)) t.srs[id] = e; }); }
     if (t.msg && src.msg && src.msg.t === t.msg.t && src.msg.seen && !t.msg.seen) t.msg.seen = src.msg.seen;
     ['tasks', 'exams'].forEach(k => {
       if (!src[k]) return; const have = new Map((t[k] || []).map(x => [x.id, x]));
@@ -411,6 +414,25 @@
     });
   }
 
-  const api = { view: null, homeHtml, bindHome, blocked, alerts, kidHtml, bindKid, renderReport, trimDetails, merge };
+  /* ================= ربط أجهزة الأسرة ================= */
+  function familyHtml() {
+    const F = window.NQFamily; if (!F || !F.enabled()) return '';
+    const NQ = N(), st = F.status(), c = F.code();
+    const state = !NQ.synced ? '⏳ جارٍ الاتصال بحساب الأسرة…' : st.err ? '⚠️ تعذّر الحفظ الآن، سيُعاد المحاولة تلقائياً' : st.pending ? '⏳ جارٍ الحفظ…' : `☁️ كل البيانات محفوظة${st.lastSync ? ' · آخر مزامنة ' + new Date(st.lastSync).toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit' }) : ''}`;
+    return `<section class="card px-card px-family">
+      <div class="pg-row"><h2>📱 ربط أجهزة الأسرة</h2><small class="muted">${state}</small></div>
+      <p class="muted" style="margin:0">درجات الأبناء ولوحة ولي الأمر محفوظة في حساب الأسرة. لمتابعتهم من موبايلك أو جهاز آخر: افتح الموقع هناك، واختر «عندي كود أسرة من جهاز آخر»، واكتب هذا الكود:</p>
+      <div class="px-fam-code"><b dir="ltr">${F.pretty(c)}</b><button type="button" class="btn ghost small" id="fam-copy">نسخ الكود</button><button type="button" class="btn ghost small" id="fam-other">عندي كود آخر</button></div>
+      <p class="hint" style="margin:0">🔒 الكود هو مفتاح بيانات الأسرة، فلا ترسله إلا لأفراد الأسرة.</p>
+    </section>`;
+  }
+  function bindFamily() {
+    const F = window.NQFamily; if (!F || !F.enabled()) return;
+    const cp = document.getElementById('fam-copy');
+    if (cp) cp.onclick = async () => { try { await navigator.clipboard.writeText(F.pretty(F.code())); N().toast('تم نسخ الكود ✓'); } catch (e) { N().toast(F.pretty(F.code())); } };
+    const ot = document.getElementById('fam-other'); if (ot) ot.onclick = () => N().familyJoinDialog();
+  }
+
+  const api = { view: null, familyHtml, bindFamily, homeHtml, bindHome, blocked, alerts, kidHtml, bindKid, renderReport, trimDetails, merge };
   window.NQP = api;
 })();

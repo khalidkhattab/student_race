@@ -771,3 +771,49 @@ main:has(> .pr-page){max-width:1240px}
 .px-exam-body .px-cd small,.px-cd small{color:inherit;opacity:1;font-size:.8rem;font-weight:700}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .px-cd.near > span{color:#1c1204}}
 :root[data-theme="dark"] .px-cd.near > span{color:#1c1204}
+
+/* ربط أجهزة الأسرة */
+.px-fam-code{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--brand-soft);border-radius:12px;padding:12px 14px}
+.px-fam-code b{font-size:1.15rem;letter-spacing:.06em;font-variant-numeric:tabular-nums;flex:1;min-width:0;overflow-wrap:anywhere}
+
+/* زر تثبيت التطبيق */
+.nq-install{position:fixed;inset-inline-start:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:40;display:flex;align-items:center;gap:4px;background:var(--card);border:1.5px solid var(--line);border-radius:999px;padding:4px;box-shadow:var(--shadow)}
+.nq-install .btn{border-radius:999px}
+.nq-install-x{width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:var(--muted);font-size:1.3rem;cursor:pointer}
+
+/* الإبلاغ عن خطأ + الشرح */
+.rp-btn{display:inline-flex;align-items:center;gap:4px;margin-top:12px;padding:6px 10px;min-height:36px;border:0;border-radius:8px;background:transparent;color:var(--muted);font:inherit;font-size:.82rem;cursor:pointer}
+.rp-btn:hover{background:var(--chip);color:var(--bad)}
+.q-explain{margin:10px 0 0;padding:10px 14px;border-radius:10px;background:var(--accent-soft);color:var(--ink);font-size:.95rem}
+.rv-ex{margin:6px 0 0!important;padding:8px 12px;border-radius:8px;background:var(--accent-soft);font-size:.9rem}
+.rv .rp-btn{margin-top:4px}
+.rp-form{display:flex;flex-direction:column;gap:10px;max-height:90vh;overflow:auto}
+.rp-form h2{margin:0}
+.rp-q{margin:0;padding:10px 12px;border-radius:10px;background:var(--chip);font-weight:700}
+.rp-reasons{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.rp-reasons label{display:flex;align-items:center;gap:8px;min-height:36px;cursor:pointer}
+.rp-form textarea{min-height:60px;padding:8px 12px;border-radius:10px;border:1.5px solid var(--line);background:var(--field);color:var(--ink);font:inherit;resize:vertical}
+.rp-item{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.rp-a{margin:0;color:var(--muted)}
+.rp-a b{color:var(--ok)}
+.rp-reasons-list{margin:0;padding-inline-start:20px}
+.rp-note{margin:0;padding:6px 10px;border-radius:8px;background:var(--accent-soft)}
+
+/* مراجعة اليوم (المراجعة المتباعدة) */
+.srs-card{border:1.5px solid var(--accent);background:linear-gradient(135deg,var(--card),var(--accent-soft))}
+.srs-subs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.srs-sub{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:12px 14px;min-height:44px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font:inherit;cursor:pointer;text-align:start}
+.srs-sub span{font-size:1.4rem}
+.srs-sub small{color:var(--muted)}
+.srs-sub:hover{border-color:var(--accent)}
+
+/* أنواع أسئلة جديدة: صح/خطأ، أكمل الفراغ، صورة */
+.opts.tf{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.opts.tf .opt{justify-content:center;font-size:1.15rem;font-weight:800;min-height:64px}
+.fill input{width:100%;min-height:52px;padding:10px 16px;border-radius:12px;border:2px solid var(--line);background:var(--field);color:var(--ink);font:inherit;font-size:1.15rem;font-weight:700}
+.fill input:focus{border-color:var(--brand);outline:none;box-shadow:0 0 0 3px var(--brand-soft)}
+.fill.right input{border-color:var(--ok);background:var(--ok-soft)}
+.fill.wrong input{border-color:var(--bad);background:var(--bad-soft)}
+.q-fig{margin:4px 0 14px;display:flex;justify-content:center}
+.q-fig img{max-width:100%;max-height:300px;border-radius:12px;background:#fff;border:1px solid var(--line);padding:8px}
+.q-fig.sm img{max-height:160px}

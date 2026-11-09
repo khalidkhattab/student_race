@@ -62,7 +62,7 @@
     const p = N().cur(); if (!p) return 0;
     if (rec.kind === 'daily') return (p.daily && p.daily[today()]) ? 0 : Math.round(rec.score * 15 + (rec.pct === 100 ? 30 : 0));
     if (rec.kind === 'duel') return Math.round(rec.score * 10);
-    const base = rec.key === 'mistakes' ? 8 : (rec.mode === 'exam' ? 10 : 5);
+    const base = rec.key === 'mistakes' || rec.key === 'srs' ? 8 : (rec.mode === 'exam' ? 10 : 5);
     let xp = rec.score * base + (rec.mode === 'exam' && rec.pct === 100 ? 20 : 0);
     // إعادة نفس الاختبار خلال 24 ساعة تعطي نقاطاً أقل (حتى لا يتحول الترتيب إلى تكرار)
     const n = p.records.filter(r => r.key === rec.key && r.subjectId === rec.subjectId && r.date > Date.now() - 864e5).length;
@@ -696,7 +696,7 @@
   const dayName = d => d.toLocaleDateString('ar-EG', { weekday: 'short' });
   function parentHeader(sub) {
     return `<header class="pg-head"><div><h1>${sub.title}</h1><p class="sub">${sub.line}</p></div>
-      <div class="db-btns"><button type="button" class="btn ghost small" id="pchg">تغيير رقم ولي الأمر</button><button type="button" class="btn ghost small" id="pout">خروج ولي الأمر</button></div></header>`;
+      <div class="db-btns">${window.NQReports ? '<a class="btn ghost small" href="#reports">🚩 بلاغات الأسئلة</a>' : ''}<button type="button" class="btn ghost small" id="pchg">تغيير رقم ولي الأمر</button><button type="button" class="btn ghost small" id="pout">خروج ولي الأمر</button></div></header>`;
   }
   function bindParentHeader() {
     const NQ = N(), st = NQ.store;
@@ -744,8 +744,10 @@
       }).join('')}</section>` : '<p class="empty">لا يوجد طلاب بعد. يسجّل كل طالب من شاشة الدخول.</p>'}
       ${sums.some(x => (x.p.rewards || []).length) ? `<section class="card"><h2>المكافآت القادمة</h2><div class="pr-rw-grid">${sums.flatMap(({ p, k }) => (p.rewards || []).filter(r => !r.given).map(r => `<div><div class="pg-row sm"><b>${esc(firstName(p.name))} · ${esc(r.text)}</b><small class="${r.done ? 'pr-up' : 'muted'}">${r.done ? 'تحققت' : num(Math.min(100, Math.round(k.xp / r.xp * 100))) + '٪'}</small></div>
           <div class="db-bar"><i style="width:${Math.min(100, Math.round(k.xp / r.xp * 100))}%;background:${r.done ? 'var(--ok)' : 'var(--accent)'}"></i></div></div>`)).join('') || '<p class="empty">كل المكافآت سُلّمت 🎉</p>'}</div></section>` : ''}
+      ${window.NQP ? window.NQP.familyHtml() : ''}
     </section>`;
     bindParentHeader();
+    if (window.NQP) window.NQP.bindFamily();
     app.querySelectorAll('[data-kid]').forEach(b => b.onclick = () => { parentKid = b.dataset.kid; renderParent(); window.scrollTo(0, 0); });
     app.querySelectorAll('[data-give]').forEach(b => b.onclick = () => {
       const [pid, rid] = b.dataset.give.split('|'), r = (NQ.store.profiles[pid].rewards || []).find(x => x.id === rid);

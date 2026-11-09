@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI,Arial,sans-serif" viewBox="0 0 300 260"><rect width="300" height="260" fill="#fff"/>
+<g stroke="#e1e4dc" stroke-width="1"><path d="M30 20V240M60 20V240M90 20V240M120 20V240M150 20V240M180 20V240M210 20V240M240 20V240M270 20V240M30 30H270M30 60H270M30 90H270M30 120H270M30 150H270M30 180H270M30 210H270M30 240H270"/></g>
+<g stroke="#1c2430" stroke-width="2"><path d="M30 210H280M90 240V15"/></g>
+<text x="284" y="214" font-size="14">x</text><text x="96" y="18" font-size="14">y</text>
+<text x="84" y="226" font-size="12" text-anchor="end">0</text>
+<g font-size="12" fill="#5f6b72" text-anchor="middle"><text x="120" y="226">1</text><text x="150" y="226">2</text><text x="180" y="226">3</text><text x="210" y="226">4</text><text x="60" y="226">−1</text></g>
+<g font-size="12" fill="#5f6b72" text-anchor="end"><text x="86" y="184">1</text><text x="86" y="154">2</text><text x="86" y="124">3</text><text x="86" y="94">4</text></g>
+<polyline points="30,60 150,180 270,60" fill="none" stroke="#0f766e" stroke-width="3.5"/>
+<circle cx="150" cy="180" r="5" fill="#c2620a"/>
+</svg>

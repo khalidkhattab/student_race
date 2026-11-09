@@ -8,7 +8,7 @@
   const SUBJECTS = window.SUBJECTS || [];
   /* الصفوف تُستخرج من حقل grade في ملفات المواد، مرتبة من الأصغر للأكبر */
   const GRADE_ORDER = ['الصف الأول', 'الصف الثاني', 'الصف الثالث', 'الصف الرابع', 'الصف الخامس', 'الصف السادس', 'الصف السابع', 'الصف الثامن', 'الصف التاسع', 'الصف العاشر', 'الصف الحادي عشر', 'الصف الثاني عشر'];
-  const GRADES = [...new Set(SUBJECTS.map(s => s.grade))].sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b));
+  const GRADES = (window.NQ_GRADES || [...new Set(SUBJECTS.map(s => s.grade))]).slice().sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b));
   const KEY_GRADE = 'nq_grade';
   let curGrade = (() => { try { const g = localStorage.getItem(KEY_GRADE); return GRADES.includes(g) ? g : GRADES[0]; } catch (e) { return GRADES[0]; } })();
   const subjLabel = s => s.name + ' – ' + s.grade;
@@ -94,17 +94,23 @@
     });
   }
 
+  let cloudKind = null, cloudBusy = false, lastPull = 0;
   async function initCloud() {
-    if (!window.claude || typeof window.claude.use !== 'function') return;
+    if (cloudBusy) return; cloudBusy = true;
     try {
-      const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
-      if (!db || !user) return;
-      const id = await user.id();
-      if (!id) return;
-      const ref = db.doc('data/users/' + id + '/state');
+      let ref = null;
+      if (window.NQFamily && window.NQFamily.enabled()) { ref = window.NQFamily.ref(); cloudKind = 'family'; }
+      else if (window.claude && typeof window.claude.use === 'function') {
+        const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
+        if (!db || !user) return;
+        const id = await user.id();
+        if (!id) return;
+        ref = db.doc('data/users/' + id + '/state'); cloudKind = 'claude';
+      }
+      if (!ref) return;
       const snap = await Promise.race([ref.get(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 10000))]);
       const d = snap.exists ? snap.data() : null;
-      const before = JSON.stringify(store.profiles);
+      const before = JSON.stringify(store.profiles), beforeParent = JSON.stringify(store.parent || null);
       if (d && d.v === 2 && d.profiles) {
         Object.values(d.profiles).forEach(rp => {
           const p = store.profiles[rp.id] || findProfile(rp.name, rp.grade);
@@ -113,16 +119,48 @@
         });
         if (d.parent && !store.parent) store.parent = d.parent;
       } else if (d) addLegacy(d);
-      cloud = ref;
+      const first = !cloud;
+      cloud = ref; lastPull = Date.now();
       local.set(KEY_STORE, store);
-      if (!d || d.v !== 2 || JSON.stringify(store.profiles) !== before) persist();
-      if (!(quiz && !quiz.done)) route();
+      const changed = JSON.stringify(store.profiles) !== before || JSON.stringify(store.parent || null) !== beforeParent;
+      if (!d || d.v !== 2 || changed) persist();
+      if ((first || changed) && !(quiz && !quiz.done)) route();
       refreshSync();
     } catch (e) { /* يبقى الحفظ على الجهاز فقط */ }
+    finally { cloudBusy = false; }
+  }
+  // عند العودة للصفحة: جلب آخر تغييرات الأجهزة الأخرى في الأسرة
+  const pullSoon = () => { if (cloudKind === 'family' && document.visibilityState !== 'hidden' && Date.now() - lastPull > 30000 && !(quiz && !quiz.done)) initCloud(); };
+  document.addEventListener('visibilitychange', pullSoon);
+  window.addEventListener('focus', pullSoon);
+  function familyJoinDialog() {
+    const ov = document.createElement('div'); ov.className = 'overlay';
+    ov.innerHTML = `<form class="card" role="dialog" aria-modal="true" aria-labelledby="fjt">
+      <h2 id="fjt">📱 ربط هذا الجهاز بحساب الأسرة</h2>
+      <p class="sub" style="margin:0">اكتب كود الأسرة الموجود في «لوحة ولي الأمر» على الجهاز الآخر. ستظهر هنا كل حسابات الطلاب ودرجاتهم، وتُضم إليها حسابات هذا الجهاز.</p>
+      <label class="sr" for="fjc">كود الأسرة</label>
+      <input id="fjc" class="gm-code-in" dir="ltr" autocomplete="off" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" maxlength="30" required>
+      <p class="err" id="fje" role="alert"></p>
+      <div class="actions"><button type="button" class="btn ghost" data-x>إلغاء</button><button class="btn" type="submit">ربط ←</button></div></form>`;
+    document.body.appendChild(ov);
+    const inp = ov.querySelector('#fjc'); inp.focus();
+    ov.querySelector('[data-x]').onclick = () => ov.remove();
+    ov.querySelector('form').onsubmit = async e => {
+      e.preventDefault(); const err = ov.querySelector('#fje'); err.textContent = '⏳ جارٍ الربط…';
+      const r = await joinFamily(inp.value);
+      if (r === 'ok') { ov.remove(); toast('تم ربط الجهاز بحساب الأسرة ✓'); route(); return; }
+      err.textContent = r === 'short' ? 'الكود ناقص، اكتبه كاملاً.' : r === 'missing' ? 'لم نجد هذا الكود. تأكد منه.' : r === 'off' ? 'الربط غير متاح هنا.' : 'تعذّر الاتصال. حاول مرة أخرى.';
+    };
+  }
+  async function joinFamily(code) {
+    const F = window.NQFamily; if (!F || !F.enabled()) return 'off';
+    const c = F.clean(code); if (c.length < 16) return 'short';
+    try { if (!(await F.exists(c))) return 'missing'; } catch (e) { return 'net'; }
+    F.join(c); cloud = null; await initCloud(); return cloud ? 'ok' : 'net';
   }
   function refreshSync() {
     const el = document.getElementById('sync');
-    if (el) el.textContent = cloud ? '☁️ درجاتك محفوظة في حسابك وتظهر على أي جهاز' : '💾 درجاتك محفوظة على هذا الجهاز';
+    if (el) el.textContent = cloud ? (cloudKind === 'family' ? '☁️ درجاتك محفوظة في حساب الأسرة وتظهر على كل أجهزتها' : '☁️ درجاتك محفوظة في حسابك وتظهر على أي جهاز') : '💾 درجاتك محفوظة على هذا الجهاز';
   }
 
   /* ---------- أدوات ---------- */
@@ -174,8 +212,20 @@
   }
 
   /* ---------- التصحيح ---------- */
+  // توحيد إجابات «أكمل الفراغ»: الهمزات والتاء المربوطة والأرقام العربية والتشكيل والمسافات
+  const normAns = s => String(s == null ? '' : s).trim().toLowerCase()
+    .replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي')
+    .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[٫,]/g, '.').replace(/^ال(?=\S{3,})/, '')
+    .replace(/[−–]/g, '-').replace(/(^|\s)-\s+/g, '$1-')
+    .replace(/[\s_.،؛:!؟?"'()]+/g, ' ').replace(/(\S)-/g, '$1 ').trim();
   function scoreOf(q, resp) {
     if (resp == null) return 0;
+    if (q.type === 'fill') {
+      const r = normAns(resp); if (!r) return 0;
+      // الإجابات الرقمية تُقبل مع وحدة بعدها (مثل 40 m أو 45°) أو بصيغة 40.0
+      const numOf = x => { const m = /^(-?\d+(?: \d+)?)\s*([a-zء-ي/²³°%]{0,6}\s*[a-zء-ي/²³°%]{0,6})$/.exec(x); return m ? parseFloat(m[1].replace(' ', '.')) : null; };
+      return q.answers.some(a => { const n = normAns(a); if (n === r) return true; const x = numOf(n), y = numOf(r); return x != null && y != null && Math.abs(x - y) < 1e-9; }) ? 1 : 0;
+    }
     if (q.type === 'mcq') return resp === q.answer ? 1 : 0;
     if (q.type === 'multi') {
       const good = resp.filter(i => q.answers.includes(i)).length;
@@ -190,17 +240,20 @@
   }
   function isAnswered(q, resp) {
     if (resp == null) return false;
+    if (q.type === 'fill') return String(resp).trim().length > 0;
     if (q.type === 'multi') return resp.length > 0;
     if (q.type === 'match') return resp.every(v => v != null);
     return true;
   }
   function correctText(q) {
+    if (q.type === 'fill') return q.answers[0];
     if (q.type === 'mcq') return q.options[q.answer];
     if (q.type === 'multi') return q.answers.map(i => q.options[i]).join('، ');
     return q.items.map(it => `${it[0]} ← ${q.categories[it[1]]}`).join(' · ');
   }
   function respText(q, r) {
     if (r == null) return 'لم تُجب';
+    if (q.type === 'fill') return String(r).trim() || 'لم تُجب';
     if (q.type === 'mcq') return q.options[r];
     if (q.type === 'multi') return r.length ? r.map(i => q.options[i]).join('، ') : 'لم تُجب';
     return q.items.map((it, i) => r[i] === it[1] ? null : `${it[0]} ← ${r[i] == null ? '—' : q.categories[r[i]]}`).filter(Boolean).join(' · ');
@@ -218,7 +271,23 @@
     document.body.classList.toggle('welcome-mode', welcome);
     if (welcome) { clearInterval(timerId); return renderWelcome(); }
     updateWho();
+    // تحميل ملفات صف الطالب (أو كل صفوف الأبناء في لوحة ولي الأمر) عند الحاجة
+    if (window.NQLoadGrade) {
+      const need = [...new Set((h === 'parent' ? Object.values(store.profiles) : [cur()]).filter(Boolean).map(p => p.grade).filter(Boolean))].filter(g => !window.NQGradeReady(g));
+      if (need.length) {
+        clearInterval(timerId);
+        $app.innerHTML = '<p class="empty">⏳ جارٍ تحميل المواد…</p>';
+        Promise.all(need.map(window.NQLoadGrade)).then(() => route()).catch(() => { $app.innerHTML = '<p class="empty">⚠️ تعذّر تحميل المواد. تأكد من الاتصال ثم أعد تحميل الصفحة.</p>'; });
+        return;
+      }
+    }
     if (h === 'parent') { clearInterval(timerId); return G('route', h); }
+    if (h === 'reports' && window.NQReports) {
+      clearInterval(timerId);
+      let ok = false; try { ok = sessionStorage.getItem('nq_parent_unlocked') === '1'; } catch (e) { }
+      if (!ok) { go('#parent'); return; }
+      return window.NQReports.renderPage();
+    }
     if (h === 'login' || !cur()) {
       clearInterval(timerId);
       if (h !== 'login') { history.replaceState(null, '', '#login'); lastHash = '#login'; }
@@ -434,7 +503,7 @@
     $app.innerHTML = `
       <section class="login">
         <h1>من سيذاكر الآن؟</h1>
-        <p class="sub">كل طالب له صورته ورقمه السري وسجل درجات خاص به، حتى لو استخدمتم نفس الجهاز. <a href="#parent" class="linkish">👨‍👩‍👧 دخول ولي الأمر</a></p>
+        <p class="sub">كل طالب له صورته ورقمه السري وسجل درجات خاص به، حتى لو استخدمتم نفس الجهاز. <a href="#parent" class="linkish">👨‍👩‍👧 دخول ولي الأمر</a>${window.NQFamily && window.NQFamily.enabled() ? ' · <button type="button" class="linkish" id="fam-join">📱 عندي كود أسرة من جهاز آخر</button>' : ''}</p>
 
         <div class="card step">
           <h2><span class="stepn">1</span> اختر صفك</h2>
@@ -474,6 +543,7 @@
       const i = document.getElementById('nm'); if (i) i.focus();
     });
     $app.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => enterProfile(store.profiles[b.dataset.pick]));
+    const fj = document.getElementById('fam-join'); if (fj) fj.onclick = () => familyJoinDialog();
     $app.querySelectorAll('[data-move]').forEach(b => b.onclick = () => {
       const p = store.profiles[b.dataset.move]; p.grade = loginGrade; persist(); enterProfile(p);
     });
@@ -544,7 +614,7 @@
   function subjectStats(s, recsIn) {
     const recs = (recsIn || records()).filter(r => r.subjectId === s.id);
     const best = {};
-    recs.forEach(r => { if (r.key !== 'mistakes') best[r.key] = Math.max(best[r.key] == null ? 0 : best[r.key], r.pct); });
+    recs.forEach(r => { if (r.key !== 'mistakes' && r.key !== 'srs') best[r.key] = Math.max(best[r.key] == null ? 0 : best[r.key], r.pct); });
     const lessons = [];
     s.units.forEach(u => u.lessons.forEach(l => lessons.push({ key: u.id + '/' + l.id, unit: u, lesson: l })));
     const done = lessons.filter(x => best[x.key] != null).length;
@@ -657,6 +727,7 @@
         ${tile('وقت المذاكرة', nf(Math.round(rec.reduce((a, r) => a + r.secs, 0) / 60)) + ' د', `${nf(Math.round(wRec.reduce((a, r) => a + r.secs, 0) / 60))} د هذا الأسبوع`)}
         ${tile('أيام متتالية', nf(streakDays(rec)) + ' ' + (streakDays(rec) === 1 ? 'يوم' : 'أيام'), streakDays(rec) >= 3 ? 'استمر! 🔥' : 'ذاكر يومياً لتحصل على وسام')}
       </section>
+      ${srsCard(p)}
       <section class="pg-grid3">
         <div class="card pg-card">
           <h2>هدف اليوم</h2>
@@ -686,6 +757,7 @@
       <div class="sync" id="sync"></div>`;
     const go1 = document.getElementById('nxgo'); if (go1) go1.onclick = () => openStart(nx.s, nx.key);
     if (window.NQP) window.NQP.bindHome(p);
+    bindSrs(p);
     refreshSync();
   }
 
@@ -830,6 +902,60 @@
     $app.querySelectorAll('[data-start]').forEach(b => b.onclick = () => openStart(s, b.dataset.start));
   }
 
+  /* ---------- المراجعة المتباعدة للأخطاء ----------
+     السؤال الخاطئ يعود بعد يوم، ثم 3 أيام، ثم أسبوع، ثم أسبوعين. إذا أخطأ فيه يبدأ من جديد. */
+  const SRS_GAPS = [1, 3, 7, 14];
+  const dayKey = (t = Date.now()) => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  const addDays = n => dayKey(Date.now() + n * 864e5);
+  function srsInit(p) {
+    if (!p || p.srs) return;
+    p.srs = {};
+    Object.entries(p.wrong || {}).forEach(([sid, ids]) => (ids || []).forEach(id => { p.srs[id] = { s: sid, b: 0, d: dayKey() }; }));
+  }
+  function srsUpdate(p, sid, pairs) {
+    if (!p) return; srsInit(p);
+    const today = dayKey();
+    pairs.forEach(([id, sc]) => {
+      const e = p.srs[id];
+      if (sc < 1) p.srs[id] = { s: sid, b: 0, d: addDays(SRS_GAPS[0]) };
+      else if (e && e.d <= today) {
+        const b = e.b + 1;
+        if (b >= SRS_GAPS.length) delete p.srs[id];
+        else p.srs[id] = { s: sid, b, d: addDays(SRS_GAPS[b]) };
+      }
+    });
+  }
+  function srsDue(p) {
+    srsInit(p);
+    const today = dayKey(), bySub = {}; let next = null, nextN = 0;
+    Object.entries(p.srs || {}).forEach(([id, e]) => {
+      const s = subjectById(e.s); if (!s || s.grade !== p.grade) return;
+      if (e.d <= today) (bySub[s.id] = bySub[s.id] || { s, ids: [] }).ids.push(id);
+      else if (!next || e.d < next) { next = e.d; nextN = 1; } else if (e.d === next) nextN++;
+    });
+    return { subs: Object.values(bySub), next, nextN };
+  }
+  function srsCard(p) {
+    const d = srsDue(p), total = d.subs.reduce((a, x) => a + x.ids.length, 0);
+    if (!total && !d.next) return '';
+    const days = d.next ? Math.round((new Date(d.next + 'T00:00') - new Date(dayKey() + 'T00:00')) / 864e5) : 0;
+    return `<section class="card srs-card">
+      <div class="pg-row"><h2>🔁 مراجعة اليوم</h2>${total ? `<span class="pr-tag" style="background:var(--accent-soft);color:var(--accent-ink)">${nf(total)} سؤال</span>` : ''}</div>
+      ${total ? `<p class="muted" style="margin:0 0 10px">أسئلة أخطأت فيها من قبل وحان موعد مراجعتها. كل مرة تجيب صح تبتعد المراجعة القادمة (يوم ← 3 أيام ← أسبوع ← أسبوعان) حتى تثبت.</p>
+        <div class="srs-subs">${d.subs.map(x => `<button type="button" class="srs-sub" data-srs="${x.s.id}"><span aria-hidden="true">${x.s.icon}</span><b>${esc(x.s.name)}</b><small>${nf(x.ids.length)} سؤال</small></button>`).join('')}</div>`
+        : `<p class="muted" style="margin:0">لا توجد مراجعة اليوم 👏 المراجعة القادمة ${days === 1 ? 'غداً' : `بعد ${nf(days)} أيام`} (${nf(d.nextN)} سؤال).</p>`}
+    </section>`;
+  }
+  function bindSrs(p) {
+    $app.querySelectorAll('[data-srs]').forEach(b => b.onclick = () => {
+      const s = subjectById(b.dataset.srs); if (!s) return;
+      const ids = new Set(srsDue(p).subs.filter(x => x.s.id === s.id).flatMap(x => x.ids));
+      const pool = allQuestions(s).filter(q => ids.has(q.id)).slice(0, 15);
+      if (!pool.length) return toast('لا توجد أسئلة للمراجعة الآن');
+      startQuiz(s, 'srs', '🔁 مراجعة اليوم – ' + s.name, pool, 'practice');
+    });
+  }
+
   /* ---------- نافذة بدء الاختبار ---------- */
   function openStart(s, key) {
     let title, pool;
@@ -870,7 +996,7 @@
     if (block) { toast('⏰ ' + block); return; }
     const qs = shuffle(pool).map(q => ({
       q,
-      order: q.type === 'match' ? shuffle(q.items.map((_, i) => i)) : shuffle(q.options.map((_, i) => i))
+      order: q.type === 'match' ? shuffle(q.items.map((_, i) => i)) : q.type === 'fill' ? [] : q.tf ? [0, 1] : shuffle(q.options.map((_, i) => i))
     }));
     const limit = (opts && opts.limit) || qs.length * SECS_PER_Q;
     quiz = { limit, subjectId: s.id, key, title, mode, qs, idx: 0, resp: qs.map(() => null), checked: qs.map(() => false), start: Date.now(), done: false, opts: opts || {} };
@@ -881,6 +1007,8 @@
   const timeLeft = () => Math.max(0, quiz.limit - Math.floor((Date.now() - quiz.start) / 1000));
   const timerHtml = () => `⏳ متبقٍ <b>${fmtTime(timeLeft())}</b>`;
 
+  const qImg = (q, small) => q.img ? `<figure class="q-fig${small ? ' sm' : ''}"><img src="${esc(q.img)}" alt="${esc(q.alt || 'صورة السؤال')}" loading="lazy"></figure>` : '';
+
   /* ---------- عرض السؤال ---------- */
   function renderQuestion() {
     const { qs, idx, mode } = quiz;
@@ -890,7 +1018,7 @@
 
     if (q.type === 'mcq' || q.type === 'multi') {
       const multi = q.type === 'multi';
-      body = `<div class="opts">${item.order.map((oi, n) => {
+      body = `<div class="opts${q.tf ? ' tf' : ''}">${item.order.map((oi, n) => {
         const sel = multi ? (r || []).includes(oi) : r === oi;
         let cls = sel ? 'sel' : '';
         if (showFb) {
@@ -898,8 +1026,12 @@
           cls = isRight ? 'right' : (sel ? 'wrong' : '');
         }
         return `<button class="opt ${multi ? 'multi' : ''} ${cls}" data-o="${oi}" ${showFb ? 'disabled' : ''}>
-          <span class="mark">${multi ? (sel || (showFb && cls === 'right') ? '✓' : '') : LETTERS[n]}</span><span>${esc(q.options[oi])}</span></button>`;
+          <span class="mark">${multi ? (sel || (showFb && cls === 'right') ? '✓' : '') : q.tf ? (oi === 0 ? '✓' : '✗') : LETTERS[n]}</span><span>${esc(q.options[oi])}</span></button>`;
       }).join('')}</div>`;
+    } else if (q.type === 'fill') {
+      const cls = showFb ? (scoreOf(q, r) === 1 ? 'right' : 'wrong') : '';
+      body = `<div class="fill ${cls}"><label class="sr" for="fill-in">إجابتك</label>
+        <input id="fill-in" type="text" autocomplete="off" spellcheck="false" maxlength="80" placeholder="اكتب إجابتك هنا" value="${esc(r || '')}" ${showFb ? 'disabled' : ''}></div>`;
     } else {
       body = `<div class="match">${item.order.map(ii => {
         const it = q.items[ii], v = r ? r[ii] : null;
@@ -914,14 +1046,14 @@
       }).join('')}</div>`;
     }
 
-    const hint = q.type === 'multi' ? 'اختر كل الإجابات الصحيحة' : q.type === 'match' ? 'اختر التصنيف المناسب لكل عنصر' : 'اختر إجابة واحدة';
+    const hint = q.type === 'multi' ? 'اختر كل الإجابات الصحيحة' : q.type === 'match' ? 'اختر التصنيف المناسب لكل عنصر' : q.type === 'fill' ? 'اكتب الإجابة في المربع (رقم أو كلمة)' : q.tf ? 'هل العبارة صحيحة أم خاطئة؟' : 'اختر إجابة واحدة';
     let fb = '';
     if (showFb) {
       const sc = scoreOf(q, r);
       fb = sc === 1 ? `<div class="feedback ok">✓ إجابة صحيحة! أحسنت</div>`
         : sc > 0 ? `<div class="feedback part">◐ إجابة صحيحة جزئياً (${Math.round(sc * 100)}%)</div>`
           : `<div class="feedback no">✗ إجابة خاطئة — الصحيح: ${esc(correctText(q))}</div>`;
-      if (q.explain) fb += `<p class="hint" style="margin-top:8px">${esc(q.explain)}</p>`;
+      if (q.explain) fb += `<p class="q-explain">💡 ${esc(q.explain)}</p>`;
     }
 
     const last = idx === qs.length - 1;
@@ -943,10 +1075,12 @@
       <section class="card">
         <span class="kind">${esc(q.kind || 'سؤال')}</span>
         <p class="qtext">${esc(q.q)}</p>
+        ${qImg(q)}
         <p class="hint">${hint}</p>
         ${body}
         ${fb}
         <div class="actions">${actions}</div>
+        ${window.NQReports ? window.NQReports.button(q.id) : ''}
       </section>`;
 
     $app.querySelectorAll('[data-o]').forEach(b => b.onclick = () => {
@@ -955,6 +1089,16 @@
       else { const cur = (quiz.resp[idx] || []).slice(); const k = cur.indexOf(oi); k >= 0 ? cur.splice(k, 1) : cur.push(oi); quiz.resp[idx] = cur; }
       renderQuestion();
     });
+    const fin = document.getElementById('fill-in');
+    if (fin) {
+      if (!showFb) fin.focus();
+      fin.oninput = () => {
+        quiz.resp[idx] = fin.value;
+        const ck = $app.querySelector('[data-check]'); if (ck) ck.disabled = !fin.value.trim();
+        const fs = $app.querySelector('[data-finish]'); if (fs) fs.textContent = `تسليم (${quiz.resp.filter((x, i) => isAnswered(qs[i].q, x)).length}/${qs.length})`;
+      };
+      fin.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); const b = $app.querySelector('[data-check]:not([disabled])') || $app.querySelector('[data-next]'); if (b) b.click(); } };
+    }
     $app.querySelectorAll('select[data-i]').forEach(sel => sel.onchange = () => {
       const cur = quiz.resp[idx] ? quiz.resp[idx].slice() : q.items.map(() => null);
       cur[+sel.dataset.i] = sel.value === '' ? null : +sel.value;
@@ -999,6 +1143,7 @@
       const set = new Set(state.wrong[q.subjectId] || []);
       q.qs.forEach((it, i) => { scores[i] < 1 ? set.add(it.q.id) : set.delete(it.q.id); });
       state.wrong[q.subjectId] = [...set];
+      srsUpdate(cur(), q.subjectId, q.qs.map((it, i) => [it.q.id, scores[i]]));
     }
     if (q.opts.onDone) q.opts.onDone(rec);
     const extras = G('afterResult', rec) || null;
@@ -1032,8 +1177,11 @@
           <h2>${wrong.length ? 'راجع أخطاءك' : 'ممتاز! لا توجد أخطاء 🎉'}</h2>
           ${wrong.map(x => `<div class="rv">
             <p><span class="kind">${esc(x.q.kind || '')}</span> ${esc(x.q.q)}</p>
+            ${qImg(x.q, true)}
             <p class="yours">إجابتك: ${esc(respText(x.q, x.r))}</p>
-            <p class="ans">الصحيح: ${esc(correctText(x.q))}</p></div>`).join('')}
+            <p class="ans">الصحيح: ${esc(correctText(x.q))}</p>
+            ${x.q.explain ? `<p class="rv-ex">💡 ${esc(x.q.explain)}</p>` : ''}
+            ${window.NQReports ? window.NQReports.button(x.q.id) : ''}</div>`).join('')}
         </div>
       </section>`;
     const ag = document.getElementById('again'); if (ag && s) ag.onclick = () => openStart(s, rec.key);
@@ -1112,7 +1260,8 @@
   // واجهة مكشوفة لملف المنافسة
   window.NQ = {
     store, cur, persist, SUBJECTS, GRADES, allQuestions, subjectById, gradeOf, esc, toast, ask, go, route,
-    startQuiz, openStart, records, respText, correctText, hashPin, avatarHtml, AVATARS, fmtDate, fmtTime, shuffle, newId, subjectStats, streakDays, validPin, weakPin, digitsOnly, pinInput,
+    startQuiz, openStart, records, respText, correctText, qImg, hashPin, avatarHtml, AVATARS, fmtDate, fmtTime, shuffle, newId, subjectStats, streakDays, validPin, weakPin, digitsOnly, pinInput,
+    joinFamily, familyJoinDialog, syncNow: () => initCloud(), get cloudKind() { return cloudKind; }, get synced() { return !!cloud; },
     get grade() { return curGrade; }, renderHome: () => renderHome(), app: $app
   };
   route();

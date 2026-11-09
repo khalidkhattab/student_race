@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI,Arial,sans-serif" viewBox="0 0 300 240"><rect width="300" height="240" fill="#fff"/>
+<defs><marker id="t" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#0f766e"/></marker><marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#2563eb"/></marker><marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#c2620a"/></marker></defs>
+<line x1="50" y1="200" x2="200" y2="200" stroke="#0f766e" stroke-width="4" marker-end="url(#t)"/>
+<line x1="200" y1="200" x2="200" y2="50" stroke="#2563eb" stroke-width="4" marker-end="url(#b)"/>
+<line x1="50" y1="200" x2="196" y2="54" stroke="#c2620a" stroke-width="3" stroke-dasharray="8 5" marker-end="url(#o)"/>
+<text x="125" y="226" font-size="18" text-anchor="middle" fill="#0f766e" font-weight="700">3 N</text>
+<text x="214" y="130" font-size="18" fill="#2563eb" font-weight="700">4 N</text>
+<text x="105" y="115" font-size="22" fill="#c2620a" font-weight="700">R = ?</text>
+<text x="280" y="204" font-size="13" fill="#5f6b72">E</text><text x="196" y="40" font-size="13" fill="#5f6b72">N</text>
+</svg>
