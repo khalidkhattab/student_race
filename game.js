@@ -215,7 +215,7 @@
       const fb = window.NQ_FIREBASE;
       if (fb && fb.projectId && fb.apiKey) {
         this.mode = 'firebase';
-        this.base = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(fb.projectId) + '/databases/(default)/documents/lb';
+        this.base = 'https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(fb.projectId) + '/databases/' + encodeURIComponent(fb.database || '(default)') + '/documents/lb';
         this.key = fb.apiKey;
         this.device = devId();
         return;
