@@ -845,7 +845,7 @@
     };
     document.getElementById('pdel').onclick = async () => {
       if (!(await NQ.ask(`حذف "${p.name}" وكل درجاته نهائياً؟ لا يمكن التراجع.`, 'حذف', true))) return;
-      const st = NQ.store; delete st.profiles[p.id]; if (st.current === p.id) st.current = null; parentKid = null; NQ.persist(); scheduleSync(); rerender();
+      const st = NQ.store; if (window.NQFamily) window.NQFamily.forget(p.id); delete st.profiles[p.id]; if (st.current === p.id) st.current = null; parentKid = null; NQ.persist(); scheduleSync(); rerender();
     };
   }
 

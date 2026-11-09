@@ -33,10 +33,10 @@
   }
 
   const written = {};          // آخر نسخة كُتبت لكل مستند (لتجنّب إعادة الكتابة بلا تغيير)
-  let pendingBody = null, timer = null, lastSync = 0, lastErr = null;
+  const forgotten = new Set(); // طلاب حذفهم ولي الأمر (يُحذفون من قائمة الأسرة على كل الأجهزة)
+  let pendingBody = null, pendingCode = null, timer = null, lastSync = 0, lastErr = null;
   async function flush() {
-    timer = null; const body = pendingBody; pendingBody = null; if (!body) return;
-    const c = code();
+    timer = null; const body = pendingBody, c = pendingCode; pendingBody = null; if (!body || !c) return;
     try {
       const kids = Object.values(body.profiles || {});
       for (const p of kids) {
@@ -45,11 +45,16 @@
         await putDoc(c + '/kids/' + encodeURIComponent(p.id), p);
         written[c + '/' + p.id] = s;
       }
-      const meta = { v: 2, parent: body.parent || null, kids: kids.map(p => p.id), updated: Date.now() };
-      const ms = JSON.stringify([meta.parent, meta.kids]);
-      if (written[c] !== ms) { await putDoc(c, meta); written[c] = ms; }
+      // ندمج مع القائمة المحفوظة حتى لا يحذف جهاز بياناته قديمة طلاباً أضافهم جهاز آخر
+      const remote = await getDoc(c);
+      const removed = [...new Set([...((remote && remote.removed) || []), ...forgotten])];
+      const ids = [...new Set([...((remote && remote.kids) || []), ...kids.map(p => p.id)])].filter(id => !removed.includes(id));
+      const meta = { v: 2, parent: body.parent || (remote && remote.parent) || null, kids: ids, removed: removed.slice(-200), updated: Date.now() };
+      const ms = JSON.stringify([meta.parent, meta.kids, meta.removed]);
+      if (!remote || JSON.stringify([remote.parent || null, remote.kids || [], remote.removed || []]) !== ms) await putDoc(c, meta);
+      written[c] = ms; forgotten.clear();
       lastSync = Date.now(); lastErr = null;
-    } catch (e) { lastErr = e; pendingBody = pendingBody || body; schedule(15000); }
+    } catch (e) { lastErr = e; if (!pendingBody && pendingCode === c) pendingBody = body; schedule(15000); }
   }
   function schedule(ms) { clearTimeout(timer); timer = setTimeout(flush, ms); }
 
@@ -59,19 +64,26 @@
       const meta = await getDoc(c);
       if (!meta) return { exists: false, data: () => null };
       const profiles = {};
-      const kids = await Promise.all((meta.kids || []).map(id => getDoc(c + '/kids/' + encodeURIComponent(id)).catch(() => null)));
+      const gone = new Set(meta.removed || []);
+      const kids = await Promise.all((meta.kids || []).filter(id => !gone.has(id)).map(id => getDoc(c + '/kids/' + encodeURIComponent(id)).catch(() => null)));
       kids.forEach(p => { if (p && p.id) { profiles[p.id] = p; written[c + '/' + p.id] = JSON.stringify(p); } });
-      written[c] = JSON.stringify([meta.parent || null, meta.kids || []]);
+      written[c] = JSON.stringify([meta.parent || null, meta.kids || [], meta.removed || []]);
       lastSync = Date.now();
       return { exists: true, data: () => ({ v: 2, profiles, parent: meta.parent || null }) };
     },
-    async set(body) { pendingBody = JSON.parse(JSON.stringify(body)); schedule(1500); }
+    async set(body) { pendingBody = JSON.parse(JSON.stringify(body)); pendingCode = code(); schedule(1500); }
   });
   // يُحفظ آخر تغيير قبل إغلاق الصفحة قدر الإمكان
   addEventListener('pagehide', () => { if (pendingBody) flush(); });
 
   async function exists(c) { return !!(await getDoc(clean(c))); }
-  function join(c) { c = clean(c); try { localStorage.setItem(KEY, c); } catch (e) { } Object.keys(written).forEach(k => delete written[k]); }
+  function join(c) {
+    c = clean(c); try { localStorage.setItem(KEY, c); } catch (e) { }
+    // البيانات المحلية تُدمج مع الأسرة الجديدة بعد جلبها، فلا نكتب النسخة القديمة الآن
+    clearTimeout(timer); pendingBody = null; pendingCode = null;
+    Object.keys(written).forEach(k => delete written[k]);
+  }
+  const forget = id => { forgotten.add(id); };
 
-  window.NQFamily = { enabled, code, pretty, clean, ref, join, exists, status: () => ({ lastSync, err: lastErr, pending: !!pendingBody }) };
+  window.NQFamily = { enabled, code, pretty, clean, ref, join, exists, forget, status: () => ({ lastSync, err: lastErr, pending: !!pendingBody }) };
 })();
