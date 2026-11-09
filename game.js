@@ -260,19 +260,20 @@
           const q = await Promise.race([this.db.collection('lb').get(), new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 10000))]);
           q.docs.forEach(d => { const v = d.data() || {}; Object.values(v.students || {}).forEach(e => out.push(e)); });
         } else if (this.mode === 'firebase') {
-          let tok = '', pages = 0;
-          do {
-            const r = await fetch(this.base + '?pageSize=300&key=' + encodeURIComponent(this.key) + (tok ? '&pageToken=' + encodeURIComponent(tok) : ''));
-            if (!r.ok) throw { code: 'http_' + r.status };
-            const j = await r.json();
-            (j.documents || []).forEach(doc => {
-              try {
-                const v = JSON.parse(doc.fields && doc.fields.json ? doc.fields.json.stringValue : 'null');
-                if (v && v.students && Date.now() - (v.updated || 0) < 60 * 864e5) Object.values(v.students).forEach(e => out.push(e));
-              } catch (e) { /* مستند تالف */ }
-            });
-            tok = j.nextPageToken || ''; pages++;
-          } while (tok && pages < 10);
+          // runQuery بدل قائمة المستندات: آخر 500 جهاز نشط
+          const r = await fetch(this.base.replace(/\/lb$/, ':runQuery') + '?key=' + encodeURIComponent(this.key), {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ structuredQuery: { from: [{ collectionId: 'lb' }], orderBy: [{ field: { fieldPath: 'updated' }, direction: 'DESCENDING' }], limit: 500 } })
+          });
+          if (!r.ok) throw { code: 'http_' + r.status };
+          const rows = await r.json();
+          (Array.isArray(rows) ? rows : []).forEach(row => {
+            const doc = row && row.document; if (!doc) return;
+            try {
+              const v = JSON.parse(doc.fields && doc.fields.json ? doc.fields.json.stringValue : 'null');
+              if (v && v.students && Date.now() - (v.updated || 0) < 60 * 864e5) Object.values(v.students).forEach(e => out.push(e));
+            } catch (e) { /* مستند تالف */ }
+          });
         } else if (this.mode === 'server') {
           const r = await fetch(this.base + '/api/lb'); const j = await r.json();
           (j.devices || []).forEach(v => Object.values(v.students || {}).forEach(e => out.push(e)));
