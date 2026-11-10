@@ -417,23 +417,23 @@
   /* ================= ربط أجهزة الأسرة ================= */
   function familyHtml() {
     const F = window.NQFamily; if (!F || !F.enabled()) return '';
-    const NQ = N(), st = F.status(), c = F.code();
+    const NQ = N(), st = F.status();
     const state = !NQ.synced ? '⏳ جارٍ الاتصال بحساب الأسرة…' : st.err ? '⚠️ تعذّر الحفظ الآن، سيُعاد المحاولة تلقائياً' : st.pending ? '⏳ جارٍ الحفظ…' : `☁️ كل البيانات محفوظة${st.lastSync ? ' · آخر مزامنة ' + new Date(st.lastSync).toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit' }) : ''}`;
-    return `<section class="card px-card px-family">
-      <div class="pg-row"><h2>📱 ربط أجهزة الأسرة</h2><small class="muted">${state}</small></div>
-      <p class="muted" style="margin:0">درجات الأبناء ولوحة ولي الأمر محفوظة في حساب الأسرة. لمتابعتهم من موبايلك أو جهاز آخر اختر أسهل طريقة:</p>
-      <div class="px-fam-ways">
-        <button type="button" class="px-fam-way" id="fam-share"><span aria-hidden="true">🔗</span><b>أرسل رابط الربط</b><small>بالواتساب أو أي تطبيق، ثم اضغط عليه في الجهاز الآخر</small></button>
-        <button type="button" class="px-fam-way" id="fam-qr"><span aria-hidden="true">📷</span><b>اعرض كود QR</b><small>صوّره بكاميرا الموبايل الآخر</small></button>
+    return `<section class="card px-family-row">
+      <div class="px-fam-info"><b>📱 أجهزة الأسرة</b><small>${state}</small></div>
+      <div class="px-fam-acts">
+        <button type="button" class="linkish" id="fam-other">عندي كود من جهاز آخر</button>
+        <button type="button" class="btn" id="fam-open">+ ربط جهاز جديد</button>
       </div>
-      <div id="fam-qr-box" class="px-fam-qr" hidden></div>
-      <details class="px-fam-manual"><summary>أو اكتب الكود يدوياً</summary>
-        <p class="muted" style="margin:8px 0">افتح الموقع في الجهاز الآخر، واختر «عندي كود أسرة من جهاز آخر»، واكتب:</p>
-        <div class="px-fam-code"><b dir="ltr">${F.pretty(c)}</b><button type="button" class="btn ghost small" id="fam-copy">نسخ الكود</button><button type="button" class="btn ghost small" id="fam-other">عندي كود آخر</button></div>
-      </details>
-      <p class="hint" style="margin:0">🔒 الرابط والكود هما مفتاح بيانات الأسرة، فلا ترسلهما إلا لأفراد الأسرة.</p>
     </section>`;
   }
+  const ICO = {
+    near: '<svg aria-hidden="true" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>',
+    far: '<svg aria-hidden="true" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 005.66 0l3-3a4 4 0 00-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 00-5.66 0l-3 3a4 4 0 005.66 5.66l1-1"/></svg>',
+    wa: '<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 01-13.5 7.8L3 21l1.2-4.5A9 9 0 1121 12z"/></svg>',
+    share: '<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg>',
+    copy: '<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 00-1-1H5a1 1 0 00-1 1v10a1 1 0 001 1h3"/></svg>'
+  };
   const joinUrl = () => location.origin + location.pathname + '#join-' + window.NQFamily.code();
   let qrLib = null;
   const loadQr = () => qrLib || (qrLib = new Promise((res, rej) => {
@@ -441,28 +441,70 @@
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
     s.onload = res; s.onerror = () => { qrLib = null; rej(new Error('qr')); }; document.head.appendChild(s);
   }));
+  const SHARE_TEXT = 'رابط ربط جهازك بحساب أسرتنا في منصة اختباراتي (لا ترسله لأحد خارج الأسرة):';
+  async function copyText(t, ok) { try { await navigator.clipboard.writeText(t); N().toast(ok); } catch (e) { N().toast(t); } }
+  // نافذة «ربط جهاز جديد»: سؤال واحد ثم الطريقة المناسبة (على الموبايل تظهر من أسفل الشاشة)
+  function openLinkWindow() {
+    const F = window.NQFamily;
+    document.querySelectorAll('.overlay.px-link').forEach(x => x.remove());
+    const ov = document.createElement('div'); ov.className = 'overlay px-link';
+    const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); if (opener) opener.focus(); };
+    const onKey = e => { if (e.key === 'Escape') close(); };
+    const opener = document.activeElement;
+    const shell = (title, body, back) => `<div class="card px-sheet" role="dialog" aria-modal="true" aria-labelledby="pxl-t">
+      <span class="px-grab" aria-hidden="true"></span>
+      <div class="px-sheet-head">${back ? '<button type="button" class="px-icon-btn" data-back aria-label="رجوع">→</button>' : ''}<h2 id="pxl-t">${title}</h2><button type="button" class="px-icon-btn" data-x aria-label="إغلاق">×</button></div>
+      ${body}
+      <p class="hint px-sheet-note">🔒 الرابط والكود مفتاح بيانات الأسرة، أرسلهما لأفراد الأسرة فقط.</p></div>`;
+    const bind = () => {
+      ov.querySelector('[data-x]').onclick = close;
+      const b = ov.querySelector('[data-back]'); if (b) b.onclick = () => step('choose');
+      const f = ov.querySelector('button:not([data-x]):not([data-back])') || ov.querySelector('[data-x]'); if (f) f.focus();
+    };
+    function step(s) {
+      if (s === 'choose') {
+        ov.innerHTML = shell('أين الجهاز الآخر؟', `<div class="px-choose">
+          <button type="button" class="px-choice on" data-go="near">${ICO.near}<b>بجانبي الآن</b><small>أعرض كود QR لتصويره بالكاميرا</small></button>
+          <button type="button" class="px-choice" data-go="far">${ICO.far}<b>في مكان آخر</b><small>أرسل رابطاً بالواتساب أو أي تطبيق</small></button>
+        </div>
+        <details class="px-fam-manual"><summary>أو اكتب الكود يدوياً</summary>
+          <p class="muted" style="margin:6px 0">في الجهاز الآخر اختر «عندي كود أسرة من جهاز آخر» واكتب:</p>
+          <div class="px-fam-code"><b dir="ltr">${F.pretty(F.code())}</b><button type="button" class="btn ghost small" data-copycode>نسخ</button></div>
+        </details>`);
+        bind();
+        ov.querySelectorAll('[data-go]').forEach(b => b.onclick = () => step(b.dataset.go));
+        ov.querySelector('[data-copycode]').onclick = () => copyText(F.pretty(F.code()), 'تم نسخ الكود ✓');
+      } else if (s === 'near') {
+        ov.innerHTML = shell('صوّر هذا الكود', `<div class="px-qr-step"><div class="px-qr-img" id="pxl-qr"><p class="muted">⏳ جارٍ التجهيز…</p></div>
+          <ol class="px-steps"><li>افتح الكاميرا في الجهاز الآخر.</li><li>وجّهها على الكود حتى يظهر رابط.</li><li>اضغط الرابط ثم «نعم، اربط الجهاز».</li></ol></div>`, true);
+        bind();
+        loadQr().then(() => {
+          const q = window.qrcode(0, 'M'); q.addData(joinUrl()); q.make();
+          const el = ov.querySelector('#pxl-qr'); if (!el) return;
+          el.setAttribute('role', 'img'); el.setAttribute('aria-label', 'كود QR لربط جهاز آخر بحساب الأسرة');
+          el.innerHTML = q.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+        }).catch(() => { const el = ov.querySelector('#pxl-qr'); if (el) el.innerHTML = '<p class="muted">تعذّر تجهيز الكود (يحتاج إنترنت). ارجع واختر «في مكان آخر».</p>'; });
+      } else {
+        const url = joinUrl();
+        ov.innerHTML = shell('أرسل رابط الربط', `<div class="px-send">
+          <a class="px-send-btn wa" href="https://wa.me/?text=${encodeURIComponent(SHARE_TEXT + '\n' + url)}" target="_blank" rel="noopener">${ICO.wa}<span><b>إرسال بالواتساب</b><small>لنفسك أو لأحد أفراد الأسرة</small></span></a>
+          ${navigator.share ? `<button type="button" class="px-send-btn" data-share>${ICO.share}<span><b>مشاركة بتطبيق آخر</b><small>رسائل، بريد، تيليجرام…</small></span></button>` : ''}
+          <button type="button" class="px-send-btn" data-copy>${ICO.copy}<span><b>نسخ الرابط</b><small>للصقه في أي مكان</small></span></button>
+        </div><p class="muted" style="margin:0">افتح الرابط على الجهاز الآخر، ثم اضغط «نعم، اربط الجهاز».</p>`, true);
+        bind();
+        const sh = ov.querySelector('[data-share]');
+        if (sh) sh.onclick = async () => { try { await navigator.share({ title: 'منصة اختباراتي', text: SHARE_TEXT, url }); } catch (e) { } };
+        ov.querySelector('[data-copy]').onclick = () => copyText(url, 'تم نسخ رابط الربط ✓');
+      }
+    }
+    ov.onclick = e => { if (e.target === ov) close(); };
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(ov);
+    step('choose');
+  }
   function bindFamily() {
     const F = window.NQFamily; if (!F || !F.enabled()) return;
-    const sh = document.getElementById('fam-share');
-    if (sh) sh.onclick = async () => {
-      const url = joinUrl(), text = 'رابط ربط جهازك بحساب أسرتنا في منصة اختباراتي (لا ترسله لأحد خارج الأسرة):';
-      if (navigator.share) { try { await navigator.share({ title: 'منصة اختباراتي', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
-      try { await navigator.clipboard.writeText(url); N().toast('تم نسخ رابط الربط ✓ الصقه في رسالة لنفسك أو لأحد أفراد الأسرة'); }
-      catch (e) { window.open('https://wa.me/?text=' + encodeURIComponent(text + '\n' + url), '_blank', 'noopener'); }
-    };
-    const qb = document.getElementById('fam-qr'), box = document.getElementById('fam-qr-box');
-    if (qb) qb.onclick = async () => {
-      if (!box.hidden) { box.hidden = true; return; }
-      box.hidden = false; box.innerHTML = '<p class="muted">⏳ جارٍ تجهيز الكود…</p>';
-      try {
-        await loadQr();
-        const q = window.qrcode(0, 'M'); q.addData(joinUrl()); q.make();
-        box.innerHTML = `<div class="px-qr-img" role="img" aria-label="كود QR لربط جهاز آخر بحساب الأسرة">${q.createSvgTag({ cellSize: 6, margin: 4, scalable: true })}</div>
-          <p class="muted" style="margin:0">افتح كاميرا الموبايل الآخر ووجّهها على الكود، ثم اضغط على الرابط الذي يظهر.</p>`;
-      } catch (e) { box.innerHTML = '<p class="muted">تعذّر تجهيز كود QR (يحتاج اتصالاً بالإنترنت). استخدم «أرسل رابط الربط» بدلاً منه.</p>'; }
-    };
-    const cp = document.getElementById('fam-copy');
-    if (cp) cp.onclick = async () => { try { await navigator.clipboard.writeText(F.pretty(F.code())); N().toast('تم نسخ الكود ✓'); } catch (e) { N().toast(F.pretty(F.code())); } };
+    const op = document.getElementById('fam-open'); if (op) op.onclick = openLinkWindow;
     const ot = document.getElementById('fam-other'); if (ot) ot.onclick = () => N().familyJoinDialog();
   }
 
