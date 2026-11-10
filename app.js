@@ -469,6 +469,7 @@
   /* ---------- تسجيل الدخول: الصف ← الاسم ← الصورة والرقم السري ---------- */
   let loginGrade = null;
   function selectProfile(p) {
+    loginNew = false; loginManage = false;
     store.current = p.id;
     curGrade = p.grade;
     try { localStorage.setItem(KEY_GRADE, curGrade); } catch (e) { }
@@ -480,7 +481,7 @@
   function logout() {
     store.current = null;
     try { sessionStorage.removeItem(KEY_UNLOCK); } catch (e) { }
-    persist(); updateWho(); loginGrade = null;
+    persist(); updateWho(); loginGrade = null; loginNew = false; loginManage = false;
     go('#login');
   }
   async function enterProfile(p) {
@@ -533,52 +534,61 @@
     };
   }
 
+  // شاشة الدخول: صور طلاب الجهاز أولاً، ومربع «طالب جديد» يفتح خطوة الصف والاسم
+  let loginNew = false, loginManage = false;
+  const TILE_COLORS = ['#0f766e', '#c2620a', '#2563eb', '#7c3aed', '#be185d', '#15803d', '#b45309', '#0369a1'];
+  const lockIcon = '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>';
+  function tileFace(p, i) {
+    const a = p.avatar != null ? AVATARS[p.avatar] : null;
+    return a ? `<span class="lg-face" style="background:${a[1]}" aria-hidden="true">${a[0]}</span>`
+      : `<span class="lg-face" style="background:${TILE_COLORS[i % TILE_COLORS.length]}" aria-hidden="true">${esc((p.name || '؟').trim().charAt(0))}</span>`;
+  }
   function renderLogin() {
-    if (!loginGrade) loginGrade = cur() ? cur().grade : ((Object.values(store.profiles).find(p => GRADES.includes(p.grade)) || {}).grade || null);
-    const people = Object.values(store.profiles)
-      .filter(p => p.grade === loginGrade)
+    const people = Object.values(store.profiles).filter(p => GRADES.includes(p.grade))
       .sort((a, b) => (b.records.length ? b.records[b.records.length - 1].date : b.created) - (a.records.length ? a.records[a.records.length - 1].date : a.created));
     const noGrade = Object.values(store.profiles).filter(p => !GRADES.includes(p.grade));
+    const showNew = loginNew || !people.length;
+    if (!loginGrade) loginGrade = cur() ? cur().grade : (people[0] ? people[0].grade : null);
+    const fam = window.NQFamily && window.NQFamily.enabled(), staff = window.NQSchools && window.NQSchools.enabled();
     $app.innerHTML = `
-      <section class="login">
-        <h1>من سيذاكر الآن؟</h1>
-        <p class="sub">كل طالب له صورته ورقمه السري وسجل درجات خاص به، حتى لو استخدمتم نفس الجهاز. <a href="#parent" class="linkish">👨‍👩‍👧 دخول ولي الأمر</a>${window.NQFamily && window.NQFamily.enabled() ? ' · <button type="button" class="linkish" id="fam-join">📱 عندي كود أسرة من جهاز آخر</button>' : ''}${window.NQSchools && window.NQSchools.enabled() ? ' · <a href="#staff" class="linkish">🏫 دخول المعلمين والمدارس</a>' : ''}</p>
-
-        <div class="card step">
-          <h2><span class="stepn">1</span> اختر صفك</h2>
-          <div class="grade-tabs big" role="radiogroup" aria-label="الصف الدراسي">
+      <section class="lg-page">
+        <nav class="lg-others" aria-label="حسابات أخرى">
+          <a href="#parent" class="lg-other parent">ولي الأمر</a>
+          ${staff ? '<a href="#staff" class="lg-other">المعلمون والمدارس</a>' : ''}
+        </nav>
+        <h1 class="lg-title">${people.length ? 'من سيذاكر الآن؟' : 'أهلاً بك! لنبدأ'}</h1>
+        ${people.length ? `<div class="lg-tiles${loginManage ? ' manage' : ''}">
+          ${people.map((p, i) => `<div class="lg-tile-wrap">
+            <button type="button" class="lg-tile${cur() && cur().id === p.id ? ' on' : ''}" data-pick="${p.id}">${tileFace(p, i)}<b>${esc(p.name)}</b><small>${esc(p.grade)}${p.pinHash ? ' · ' + lockIcon : ''}</small></button>
+            ${loginManage ? `<button type="button" class="lg-del" data-del="${p.id}" aria-label="حذف ${esc(p.name)} من هذا الجهاز">حذف</button>` : ''}
+          </div>`).join('')}
+          ${loginManage ? '' : `<button type="button" class="lg-tile lg-new${showNew ? ' on' : ''}" id="lg-new" aria-expanded="${showNew}"><span class="lg-face add" aria-hidden="true"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span><b>طالب جديد</b><small>اسم + صف</small></button>`}
+        </div>` : ''}
+        ${showNew && !loginManage ? `<div class="card lg-newcard">
+          <h2>${people.length ? 'طالب جديد' : 'اختر صفك واكتب اسمك'}</h2>
+          <div class="grade-tabs" role="radiogroup" aria-label="الصف الدراسي">
             ${GRADES.map(g => `<button type="button" role="radio" class="grade-tab${g === loginGrade ? ' on' : ''}" aria-checked="${g === loginGrade}" data-lg="${esc(g)}">${esc(g)}</button>`).join('')}
           </div>
-        </div>
-
-        ${loginGrade ? `
-        <div class="card step">
-          <h2><span class="stepn">2</span> ${people.length ? 'اضغط على صورتك أو اكتب اسمك' : 'اكتب اسمك'}</h2>
-          ${people.length ? `
-            <div class="people">
-              ${people.map(p => `<div class="person${cur() && cur().id === p.id ? ' on' : ''}">
-                <button type="button" class="pick" data-pick="${p.id}">${avatarHtml(p)}<span><b>${esc(p.name)}</b><small>${p.pinHash ? '🔒 ' : ''}${p.records.length} اختبار</small></span></button>
-                <button type="button" class="del" data-del="${p.id}" aria-label="حذف ${esc(p.name)} من هذا الجهاز" title="حذف">✕</button>
-              </div>`).join('')}
-            </div>
-            <p class="hint">طالب جديد؟ اكتب اسمك:</p>` : ''}
           <form id="lf" class="name-row" autocomplete="off">
             <label for="nm" class="sr">اسم الطالب</label>
-            <input id="nm" placeholder="اكتب اسمك هنا" maxlength="30" required>
-            <button class="btn" type="submit">التالي ←</button>
+            <input id="nm" placeholder="${loginGrade ? 'اكتب اسمك هنا' : 'اختر صفك أولاً'}" maxlength="30" required ${loginGrade ? '' : 'disabled'}>
+            <button class="btn" type="submit" ${loginGrade ? '' : 'disabled'}>التالي ←</button>
           </form>
           <p class="err" id="lerr" role="alert"></p>
         </div>` : ''}
-
-        ${noGrade.length ? `<div class="card step">
+        ${noGrade.length ? `<div class="card lg-newcard">
           <h2>سجلات قديمة بدون صف</h2>
-          <p class="hint">اختر الصف أولاً ثم اضغط على الاسم لنقله إلى ${loginGrade ? esc(loginGrade) : 'الصف المختار'}:</p>
+          <p class="hint">افتح «طالب جديد» واختر الصف، ثم اضغط على الاسم لنقله إلى ${loginGrade ? esc(loginGrade) : 'الصف المختار'}:</p>
           <div class="people">${noGrade.map(p => `<div class="person"><button type="button" class="pick" data-move="${p.id}" ${loginGrade ? '' : 'disabled'}>${avatarHtml(p)}<span><b>${esc(p.name)}</b><small>${p.records.length} اختبار</small></span></button></div>`).join('')}</div>
         </div>` : ''}
+        <p class="lg-foot">لكل طالب صورته ورقمه السري${fam ? ' · <button type="button" class="linkish" id="fam-join">ربط هذا الجهاز بحساب الأسرة</button>' : ''}${people.length ? ` · <button type="button" class="linkish" id="lg-manage">${loginManage ? 'تم' : 'إدارة الطلاب'}</button>` : ''}</p>
       </section>`;
 
+    const nb = document.getElementById('lg-new');
+    if (nb) nb.onclick = () => { loginNew = !loginNew; renderLogin(); const i = document.getElementById('nm'); if (i && loginNew) i.focus(); };
+    const mg = document.getElementById('lg-manage'); if (mg) mg.onclick = () => { loginManage = !loginManage; loginNew = false; renderLogin(); };
     $app.querySelectorAll('[data-lg]').forEach(b => b.onclick = () => {
-      loginGrade = b.dataset.lg; renderLogin();
+      loginGrade = b.dataset.lg; loginNew = true; renderLogin();
       const i = document.getElementById('nm'); if (i) i.focus();
     });
     $app.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => enterProfile(store.profiles[b.dataset.pick]));
@@ -592,6 +602,7 @@
       if (!(await ask(`سيتم حذف "${p.name}" وكل درجاته وأخطائه نهائياً. هل أنت متأكد؟`, 'حذف الطالب', true))) return;
       delete store.profiles[p.id];
       if (store.current === p.id) store.current = null;
+      if (!Object.keys(store.profiles).length) loginManage = false;
       persist(); updateWho(); renderLogin(); toast('تم حذف الطالب');
     });
     const f = document.getElementById('lf');
