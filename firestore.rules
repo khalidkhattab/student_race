@@ -1,0 +1,99 @@
+rules_version = '2';
+// قواعد Firestore لمنصة اختباراتي (قاعدة البيانات: default)
+// انسخها كاملة في Firebase › Firestore Database › Rules ثم Publish.
+// ضع رقم حساب مدير المنصة مكان ADMIN_UID (يظهر في صفحة ‎#admin بعد تسجيل الدخول).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function okDoc() {
+      return request.resource.data.keys().hasOnly(['json', 'updated'])
+        && request.resource.data.json is string;
+    }
+    function signed() { return request.auth != null; }
+    function isAdmin() { return signed() && request.auth.uid in ['ADMIN_UID']; }
+    function staffPath() { return /databases/$(database)/documents/staff/$(request.auth.uid); }
+    function isStaffOf(sid) { return signed() && exists(staffPath()) && get(staffPath()).data.sid == sid; }
+    function isSchoolOf(sid) { return isStaffOf(sid) && get(staffPath()).data.role == 'school'; }
+    function str(f, n) { return request.resource.data[f] is string && request.resource.data[f].size() <= n; }
+
+    // لوحة الشرف (الاسم الأول والنقاط فقط)
+    match /lb/{device} {
+      allow read: if true;
+      allow write: if device.size() < 40 && okDoc()
+        && request.resource.data.json.size() < 200000;
+    }
+
+    // حساب الأسرة (بالكود السري)
+    match /families/{fid} {
+      allow get: if fid.size() >= 16;
+      allow create, update: if fid.size() >= 16 && fid.size() <= 32 && okDoc()
+        && request.resource.data.json.size() < 100000;
+      match /kids/{pid} {
+        allow get: if fid.size() >= 16;
+        allow create, update: if fid.size() >= 16 && pid.size() < 40 && okDoc()
+          && request.resource.data.json.size() < 900000;
+      }
+    }
+
+    // بلاغات الأسئلة
+    match /reports/{rid} {
+      allow read: if true;
+      allow create: if okDoc() && request.resource.data.json.size() < 4000;
+    }
+
+    // طلبات تسجيل المدارس (يرسلها أي أحد، ويراها المدير فقط)
+    match /schoolRequests/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['name', 'region', 'stages', 'contact', 'at'])
+        && str('name', 120) && str('region', 40) && str('contact', 120)
+        && request.resource.data.stages is list && request.resource.data.stages.size() <= 3;
+      allow read, delete: if isAdmin();
+    }
+
+    // المدارس (يضيفها المدير فقط)
+    match /schools/{sid} {
+      allow get: if true;
+      allow list, write: if isAdmin();
+    }
+
+    // روابط الدعوة: حساب مدرسة (من المدير) أو معلمين (من حساب المدرسة)
+    match /invites/{token} {
+      allow get: if token.size() >= 20;
+      allow create: if token.size() >= 20
+        && (isAdmin() || (request.resource.data.type == 'teacher' && isSchoolOf(request.resource.data.sid)));
+      allow delete: if isAdmin();
+    }
+
+    // حسابات المدارس والمعلمين
+    match /staff/{uid} {
+      allow get: if signed() && (request.auth.uid == uid || isAdmin() || isSchoolOf(resource.data.sid));
+      allow list: if isAdmin() || isSchoolOf(resource.data.sid);
+      allow create: if signed() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['role', 'sid', 'invite', 'name', 'at'])
+        && str('name', 60)
+        && get(/databases/$(database)/documents/invites/$(request.resource.data.invite)).data.sid == request.resource.data.sid
+        && get(/databases/$(database)/documents/invites/$(request.resource.data.invite)).data.type == request.resource.data.role;
+      allow delete: if isAdmin() || isSchoolOf(resource.data.sid);
+    }
+
+    // الفصول وطلابها (درجات الطالب يراها معلم الفصل وحساب المدرسة فقط)
+    match /classes/{cid} {
+      allow get: if true;
+      allow list: if signed();
+      allow create: if cid.size() >= 12 && signed()
+        && request.resource.data.teacher == request.auth.uid && isStaffOf(request.resource.data.sid);
+      allow update: if signed() && (resource.data.teacher == request.auth.uid || isSchoolOf(resource.data.sid))
+        && request.resource.data.sid == resource.data.sid && request.resource.data.teacher == resource.data.teacher;
+      allow delete: if signed() && (resource.data.teacher == request.auth.uid || isSchoolOf(resource.data.sid));
+      match /students/{pid} {
+        function cls() { return get(/databases/$(database)/documents/classes/$(cid)).data; }
+        function okStu() {
+          return request.resource.data.keys().hasOnly(['json', 'name', 'grade', 'updated'])
+            && request.resource.data.json is string && request.resource.data.json.size() < 900000;
+        }
+        allow read: if signed() && (cls().teacher == request.auth.uid || isSchoolOf(cls().sid) || isAdmin());
+        allow create: if pid.size() >= 12 && cls().open == true && okStu();
+        allow update: if pid.size() >= 12 && okStu();
+        allow delete: if pid.size() >= 12;
+      }
+    }
+  }
+}
