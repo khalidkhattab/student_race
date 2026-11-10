@@ -906,3 +906,12 @@ main:has(> .pr-page){max-width:1240px}
 .gm-scope.on{border-color:var(--brand);background:var(--brand);color:var(--brand-ink)}
 .gm-scope:disabled{opacity:.45;cursor:not-allowed}
 @media (max-width:600px){.gm-scopes{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}.gm-scope{flex:none}}
+
+/* مواد المعلم وصلاحيات ولي الأمر */
+.sc-kidlist{display:flex;flex-direction:column;gap:10px}
+.sc-kid{border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;display:flex;flex-direction:column;gap:4px}
+.sc-kid-head{display:flex;align-items:center;gap:8px;min-height:40px;cursor:pointer;flex-wrap:wrap}
+.sc-subjs{display:flex;flex-wrap:wrap;gap:4px 14px}
+.sc-subjs label{display:flex;align-items:center;gap:6px;min-height:36px;cursor:pointer;font-size:.92rem}
+.sc-allowed{display:block;color:var(--muted);font-size:.78rem;font-weight:400}
+.sc-subj-form{align-items:flex-end}

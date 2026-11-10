@@ -300,7 +300,7 @@
       pid: p.id, name: p.hidden ? 'طالب' : firstName(p.name), avatar: p.hidden ? null : (p.avatar == null ? null : p.avatar),
       grade: p.grade, hidden: !!p.hidden, team: p.team || null, xp, level: L.i, week: wk, weekXp: xpIn(p, wk),
       stage: window.NQSchools ? window.NQSchools.stageOf(p.grade) : null,
-      cls: p.cls ? { cid: p.cls.cid, sid: p.cls.sid, region: p.cls.region, school: p.cls.school, section: p.cls.section } : null,
+      cls: (m => m ? { cid: m.cid, sid: m.sid, region: m.region, school: m.school, section: m.section } : null)(window.NQSchools ? window.NQSchools.primary(p) : null),
       weekAvg: a.avg, weekN: a.n, prevAvg: b.avg, prevN: b.n, subj,
       daily: p.daily && p.daily[d] ? Object.assign({ date: d }, p.daily[d]) : null, duels, updated: Date.now()
     };
@@ -333,7 +333,7 @@
     const NQ = N(), p = NQ.cur(), app = NQ.app;
     const subs = NQ.SUBJECTS.filter(s => s.grade === p.grade);
     const lg = leagueOf(totalXp(p));
-    const S = window.NQSchools, my = p.cls || null, myStage = S ? S.stageOf(p.grade) : null;
+    const S = window.NQSchools, my = S ? S.primary(p) : null, myStage = S ? S.stageOf(p.grade) : null;
     if (!boardScope || (!my && /^(class|school|region)$/.test(boardScope))) boardScope = my ? 'class' : 'all';
     const draw = (list) => {
       const scopes = [['home', '🏠 البيت'], ['class', '👥 فصلي'], ['school', '🏫 مدرستي'], ['region', '🗺️ منطقتي'], ['all', '🇰🇼 كل المدارس']];
@@ -910,6 +910,7 @@
     if (src.rewards && !t.rewards) t.rewards = src.rewards;
     ['team', 'goal', 'hidden'].forEach(k => { if (t[k] == null && src[k] != null) t[k] = src[k]; });
     if (window.NQP) window.NQP.merge(t, src);
+    if (window.NQSchools) window.NQSchools.merge(t, src);
   }
 
   /* ================= التوجيه ================= */

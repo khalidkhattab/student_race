@@ -113,6 +113,11 @@
   }
   const errTxt = e => e && e.code === 'denied' ? 'ليس لديك صلاحية لهذا الإجراء.' : 'تعذّر الاتصال. تأكد من الإنترنت وحاول مرة أخرى.';
   const page = (title, sub, body, actions) => `<section class="pr-page sc-page"><header class="pg-head"><div><h1>${title}</h1>${sub ? `<p class="sub">${sub}</p>` : ''}</div>${actions ? `<div class="db-btns">${actions}</div>` : ''}</header>${body}</section>`;
+  // المادة: اسم عام يطابق أسماء المواد في كل صف (الرياضيات، العلوم…)
+  const SUBJECT_NAMES = ['الرياضيات', 'العلوم', 'الفيزياء', 'الكيمياء', 'الأحياء', 'اللغة العربية', 'اللغة الإنجليزية', 'التربية الإسلامية', 'القرآن الكريم', 'الاجتماعيات', 'دولة الكويت'];
+  const ALL_SUBJ = 'كل المواد (مربي الفصل)';
+  const subjectOpts = sel => SUBJECT_NAMES.concat(ALL_SUBJ).map(s => `<option ${s === sel ? 'selected' : ''}>${s}</option>`).join('');
+  const subjLabel = c => !c.subject ? 'لم تُحدَّد المادة' : c.subject === ALL_SUBJ ? 'مربي الفصل' : c.subject;
   const gradeOpts = sel => ALL_GRADES.map(g => `<option ${g === sel ? 'selected' : ''}>${g}</option>`).join('');
   const regionOpts = sel => REGIONS.map(r => `<option ${r === sel ? 'selected' : ''}>${r}</option>`).join('');
 
@@ -285,10 +290,11 @@
       ${me.role === 'school' ? `<section class="card"><div class="pg-row"><h2>المعلمون (${num(teachers.filter(t => t.role === 'teacher').length)})</h2><button type="button" class="btn small" id="st-inv">+ دعوة معلمين</button></div>
         <ul class="pg-list">${teachers.map(t => `<li><div><b>${esc(t.name)}</b><small>${t.role === 'school' ? 'حساب المدرسة' : 'معلم'}</small></div>${t.role === 'teacher' ? `<button type="button" class="linkish" data-rm="${t.id}">إزالة</button>` : ''}</li>`).join('')}</ul></section>` : ''}
       <section class="card"><div class="pg-row"><h2>الفصول (${num(classes.length)})</h2></div>
-        ${classes.length ? `<div class="sc-classes">${classes.map(c => `<button type="button" class="sc-class" data-cls="${c.id}"><b>${esc(c.grade)} · ${esc(c.section)}</b><small>${esc(c.title || '')}${me.role === 'school' ? ' · ' + esc(tname.get(c.teacher) || '') : ''}</small></button>`).join('')}</div>` : '<p class="empty">لا توجد فصول بعد.</p>'}
+        ${classes.length ? `<div class="sc-classes">${classes.map(c => `<button type="button" class="sc-class" data-cls="${c.id}"><b>${esc(c.grade)} · ${esc(c.section)}</b><small>${esc(subjLabel(c))}${c.title ? ' · ' + esc(c.title) : ''}${me.role === 'school' ? ' · ' + esc(tname.get(c.teacher) || '') : ''}</small></button>`).join('')}</div>` : '<p class="empty">لا توجد فصول بعد.</p>'}
         <form class="px-form" id="st-add"><label><span>الصف</span><select id="st-g">${gradeOpts('الصف العاشر')}</select></label>
           <label><span>الشعبة</span><input id="st-s" required maxlength="10" placeholder="مثال: 3"></label>
-          <label class="wide"><span>اسم إضافي (اختياري)</span><input id="st-t" maxlength="40" placeholder="مثال: فيزياء"></label>
+          <label><span>المادة التي تدرّسها</span><select id="st-sub" required><option value="">— اختر —</option>${subjectOpts()}</select></label>
+          <label><span>ملاحظة (اختياري)</span><input id="st-t" maxlength="40" placeholder="مثال: مجموعة التقوية"></label>
           <button class="btn" type="submit">+ إنشاء فصل</button></form></section>
       <section class="card sc-ranks"><h2>🏆 ترتيب المدرسة</h2><div id="st-rank"><p class="muted">⏳</p></div></section>`,
       '<button type="button" class="btn ghost small" id="sc-out">خروج</button>');
@@ -304,7 +310,8 @@
     document.getElementById('st-add').onsubmit = async e => {
       e.preventDefault();
       const cid = rid(14);
-      try { await db.set('classes/' + cid, { sid: me.sid, teacher: u.uid, teacherName: me.name, grade: document.getElementById('st-g').value, section: document.getElementById('st-s').value.trim(), title: document.getElementById('st-t').value.trim(), schoolName: school.name, region: school.region, open: true, created: Date.now() });
+      const subject = document.getElementById('st-sub').value; if (!subject) return N().toast('اختر المادة');
+      try { await db.set('classes/' + cid, { sid: me.sid, teacher: u.uid, teacherName: me.name, subject, grade: document.getElementById('st-g').value, section: document.getElementById('st-s').value.trim(), title: document.getElementById('st-t').value.trim(), schoolName: school.name, region: school.region, open: true, created: Date.now() });
         N().go('#staff-class-' + cid); }
       catch (x) { N().toast(errTxt(x)); }
     };
@@ -336,7 +343,7 @@
     const sum = p => {
       const rs = p.records || [], w = rs.filter(r => r.date > wk);
       const last = rs.reduce((m, r) => !m || r.date > m.date ? r : m, null);
-      const subs = NQ.SUBJECTS.filter(s => s.grade === p.grade).map(s => ({ s, st: NQ.subjectStats(s, rs) })).filter(x => x.st.level != null);
+      const subs = allowedSubs(p).map(s => ({ s, st: NQ.subjectStats(s, rs) })).filter(x => x.st.level != null);
       const lvl = subs.length ? Math.round(subs.reduce((a, x) => a + x.st.level, 0) / subs.length) : null;
       const weak = subs.slice().sort((a, b) => a.st.level - b.st.level)[0];
       return { w: w.length, q: w.reduce((a, r) => a + (r.total || 0), 0), avg: w.length ? Math.round(w.reduce((a, r) => a + r.pct, 0) / w.length) : null, last, lvl, weak };
@@ -349,15 +356,20 @@
     const hard = Object.entries(miss).filter(([id, m]) => qmap[id] && m.n >= 2 && m.w > 0).sort((a, b) => b[1].w / b[1].n - a[1].w / a[1].n || b[1].w - a[1].w).slice(0, 8);
     const color = v => v == null ? 'var(--muted)' : NQ.gradeOf(v).c;
     const ago = r => { if (!r) return 'لم يبدأ'; const d = Math.floor((new Date().setHours(0, 0, 0, 0) - new Date(r.date).setHours(0, 0, 0, 0)) / DAY); return d <= 0 ? 'اليوم' : d === 1 ? 'أمس' : `منذ ${num(d)} أيام`; };
-    app.innerHTML = page(`📚 ${esc(c.grade)} · ${esc(c.section)}${c.title ? ' · ' + esc(c.title) : ''}`, `${esc(c.schoolName || '')} · ${num(kids.length)} طالب · ${c.open ? 'الانضمام مفتوح' : 'الانضمام مغلق'}`, `
+    app.innerHTML = page(`📚 ${esc(c.grade)} · ${esc(c.section)} · ${esc(subjLabel(c))}`, `${esc(c.schoolName || '')} · ${num(kids.length)} طالب · ${c.open ? 'الانضمام مفتوح' : 'الانضمام مغلق'}${c.title ? ' · ' + esc(c.title) : ''}`, `
+      <form class="card px-form sc-subj-form" id="cl-subf"><label><span>مادة هذا الفصل (تظهر لأولياء الأمور، ويُقترح عليهم مشاركة درجاتها)</span><select id="cl-sub"><option value="">— اختر —</option>${subjectOpts(c.subject)}</select></label><button class="btn ghost" type="submit">حفظ</button></form>
       <section class="card"><div class="pg-row"><h2>الطلاب</h2><div class="db-btns"><button type="button" class="btn small" id="cl-inv">+ دعوة أولياء الأمور</button><button type="button" class="btn ghost small" id="cl-open">${c.open ? 'إغلاق الانضمام' : 'فتح الانضمام'}</button></div></div>
         ${list.length ? `<div class="table-wrap"><table class="px-table sc-table"><thead><tr><th>الطالب</th><th>آخر نشاط</th><th>أسئلة الأسبوع</th><th>متوسط الأسبوع</th><th>المستوى العام</th><th>يحتاج متابعة</th><th></th></tr></thead><tbody>
-          ${list.map(({ p, k }) => `<tr><td><b>${esc(p.name)}</b></td><td>${ago(k.last)}</td><td>${num(k.q)}</td><td style="color:${color(k.avg)};font-weight:800">${k.avg == null ? '—' : num(k.avg) + '٪'}</td><td style="color:${color(k.lvl)};font-weight:800">${k.lvl == null ? '—' : num(k.lvl) + '٪'}</td><td>${k.weak && k.weak.st.level < 65 ? esc(k.weak.s.name) : '—'}</td><td><button type="button" class="btn ghost small" data-stu="${esc(p._doc)}">التقرير</button></td></tr>`).join('')}
+          ${list.map(({ p, k }) => `<tr><td><b>${esc(p.name)}</b><small class="sc-allowed">${esc(allowedSubs(p).map(s => s.name).join('، ') || 'لا توجد مواد مسموحة')}</small></td><td>${ago(k.last)}</td><td>${num(k.q)}</td><td style="color:${color(k.avg)};font-weight:800">${k.avg == null ? '—' : num(k.avg) + '٪'}</td><td style="color:${color(k.lvl)};font-weight:800">${k.lvl == null ? '—' : num(k.lvl) + '٪'}</td><td>${k.weak && k.weak.st.level < 65 ? esc(k.weak.s.name) : '—'}</td><td><button type="button" class="btn ghost small" data-stu="${esc(p._doc)}">التقرير</button></td></tr>`).join('')}
         </tbody></table></div>` : '<p class="empty">لم ينضم أي طالب بعد. أرسل رابط الدعوة لجروب أولياء الأمور.</p>'}</section>
       ${hard.length ? `<section class="card"><h2>أكثر الأسئلة خطأً في الفصل (آخر 30 يوماً)</h2><ul class="pg-list">${hard.map(([id, m]) => `<li><span class="dot" style="background:var(--bad)"></span><div><b>${esc(qmap[id].q.q)}</b><small>${qmap[id].s.icon} ${esc(qmap[id].s.name)} · الصحيح: ${esc(NQ.correctText(qmap[id].q))}</small></div><span class="pct" style="color:var(--bad)">${num(Math.round(m.w / m.n * 100))}٪ خطأ</span></li>`).join('')}</ul></section>` : ''}
       <section class="pr-danger"><span class="muted">حذف الفصل يزيل قائمة طلابه من المنصة (لا تتأثر درجاتهم عند أسرهم).</span><button type="button" class="btn danger small" id="cl-del">حذف الفصل</button></section>`,
       '<a class="btn ghost small" href="#staff">→ كل الفصول</a>');
     document.getElementById('cl-inv').onclick = () => shareWindow({ title: 'دعوة أولياء الأمور', url: siteUrl('class-' + cid), text: `دعوة لانضمام أبنائكم إلى فصل ${c.grade} / ${c.section} – ${c.schoolName} في منصة اختباراتي. افتح الرابط وأدخل رقم ولي الأمر:`, note: 'ولي الأمر يقبل الدعوة لأبنائه من لوحته. يمكنك إغلاق الانضمام بعد اكتمال الفصل.' });
+    document.getElementById('cl-subf').onsubmit = async e => {
+      e.preventDefault(); const v = document.getElementById('cl-sub').value; if (!v) return N().toast('اختر المادة');
+      try { await db.set('classes/' + cid, Object.assign({}, stripId(c), { subject: v })); N().toast('تم حفظ المادة ✓'); renderClass(cid); } catch (x) { N().toast(errTxt(x)); }
+    };
     document.getElementById('cl-open').onclick = async () => { try { await db.set('classes/' + cid, Object.assign({}, stripId(c), { open: !c.open })); renderClass(cid); } catch (e) { N().toast(errTxt(e)); } };
     document.getElementById('cl-del').onclick = async () => {
       if (!(await N().ask('حذف الفصل نهائياً؟', 'حذف', true))) return;
@@ -366,18 +378,21 @@
     app.querySelectorAll('[data-stu]').forEach(b => b.onclick = () => { const p = kids.find(x => x._doc === b.dataset.stu); if (p) renderStudent(c, p); });
   }
   const stripId = o => { const x = Object.assign({}, o); delete x.id; return x; };
+  // المواد التي سمح بها ولي الأمر لهذا المعلم (البيانات تصل مفلترة أصلاً، وهذا للعرض)
+  const allowedSubs = p => { const all = N().SUBJECTS.filter(s => s.grade === p.grade); return Array.isArray(p._allowed) ? all.filter(s => p._allowed.includes(s.id)) : all; };
 
   /* ----- تقرير طالب للمعلم ----- */
   function renderStudent(c, p) {
     const NQ = N(), app = NQ.app, rs = p.records || [], now = Date.now();
     const w = rs.filter(r => r.date > now - 7 * DAY), m = rs.filter(r => r.date > now - 30 * DAY);
     const avg = a => a.length ? Math.round(a.reduce((s, r) => s + r.pct, 0) / a.length) : null;
-    const subs = NQ.SUBJECTS.filter(s => s.grade === p.grade).map(s => ({ s, st: NQ.subjectStats(s, rs) }));
+    const subs = allowedSubs(p).map(s => ({ s, st: NQ.subjectStats(s, rs) }));
     const weak = subs.flatMap(x => x.st.weak).sort((a, b) => a.pct - b.pct).slice(0, 8);
     const color = v => v == null ? 'var(--muted)' : NQ.gradeOf(v).c;
     const recent = rs.slice().sort((a, b) => b.date - a.date).slice(0, 25);
     const mins = Math.round(m.reduce((s, r) => s + (r.secs || 0), 0) / 60);
-    app.innerHTML = page(`👤 ${esc(p.name)}`, `${esc(p.grade)} · ${esc(c.grade)} / ${esc(c.section)}`, `
+    app.innerHTML = page(`👤 ${esc(p.name)}`, `${esc(p.grade)} · ${esc(c.grade)} / ${esc(c.section)} · تقرير: ${esc(subs.map(x => x.s.name).join('، ') || '—')}`, `
+      <p class="hint" style="margin:0 0 12px">يظهر هنا فقط ما سمح ولي الأمر بمشاركته معك من المواد.</p>
       <section class="pg-tiles">
         <div class="card pg-tile"><small>متوسط آخر 7 أيام</small><b style="color:${color(avg(w))}">${avg(w) == null ? '—' : num(avg(w)) + '٪'}</b><small class="note muted">${num(w.length)} اختبار</small></div>
         <div class="card pg-tile"><small>متوسط آخر 30 يوماً</small><b style="color:${color(avg(m))}">${avg(m) == null ? '—' : num(avg(m)) + '٪'}</b><small class="note muted">${num(m.length)} اختبار</small></div>
@@ -385,7 +400,7 @@
         <div class="card pg-tile"><small>كل الاختبارات</small><b>${num(rs.length)}</b><small class="note muted">منذ البداية</small></div>
       </section>
       <section class="pg-grid2">
-        <div class="card"><h2>المستوى في كل مادة</h2><div class="pg-bars">${subs.map(x => `<div><div class="pg-row sm"><b>${x.s.icon} ${esc(x.s.name)}</b><b style="color:${color(x.st.level)}">${x.st.level == null ? 'لم يبدأ' : num(x.st.level) + '٪'}</b></div><div class="db-bar"><i style="width:${x.st.level || 0}%;background:${color(x.st.level)}"></i></div><small class="muted">${num(x.st.done)} من ${num(x.st.total)} درس</small></div>`).join('')}</div></div>
+        <div class="card"><h2>${subs.length === 1 ? 'المستوى في المادة' : 'المستوى في المواد المسموحة'}</h2><div class="pg-bars">${subs.map(x => `<div><div class="pg-row sm"><b>${x.s.icon} ${esc(x.s.name)}</b><b style="color:${color(x.st.level)}">${x.st.level == null ? 'لم يبدأ' : num(x.st.level) + '٪'}</b></div><div class="db-bar"><i style="width:${x.st.level || 0}%;background:${color(x.st.level)}"></i></div><small class="muted">${num(x.st.done)} من ${num(x.st.total)} درس</small></div>`).join('')}</div></div>
         <div class="card"><h2>دروس تحتاج متابعة</h2>${weak.length ? `<div class="pr-weak">${weak.map(x => `<div class="${x.pct < 55 ? 'bad' : 'mid'}"><div><b>${esc(x.name)}</b><small>${esc(x.s.name)} · ${esc(x.unit.name.split(':')[0])}</small></div><b>${num(x.pct)}٪</b></div>`).join('')}</div>` : '<p class="empty">لا توجد دروس ضعيفة 🎉</p>'}</div>
       </section>
       <section class="card"><h2>الاختبارات</h2>${recent.length ? `<ul class="pg-list">${recent.map(r => { const s = NQ.subjectById(r.subjectId); return `<li><span class="dot" style="background:${color(r.pct)}"></span><div><b>${esc(r.title)}</b><small>${s ? esc(s.name) : '—'} · ${r.mode === 'exam' ? 'اختبار' : 'تدريب'} · ${NQ.fmtDate(r.date)} · ${NQ.fmtTime(r.secs || 0)}</small></div><span class="pct" style="color:${color(r.pct)}">${num(r.pct)}٪</span><button type="button" class="btn ghost small" data-rec="${r.id}">التفاصيل</button></li>`; }).join('')}</ul>` : '<p class="empty">لم يحل أي اختبار بعد.</p>'}</section>`,
@@ -401,24 +416,45 @@
   function catchInvite(cid) { try { sessionStorage.setItem(KEY_INV, cid); } catch (e) { } N().go('#parent'); }
   const pendingInvite = () => { try { return sessionStorage.getItem(KEY_INV); } catch (e) { return null; } };
   let inviteInfo = null;
+  /* عضوية الطالب في الفصول: p.classes = [{cid, …, subjects:[معرّفات المواد المسموحة], t, left}]
+     (الطالب قد يكون عند أكثر من معلم؛ «left» يبقى كعلامة حتى لا يرجع الفصل من جهاز آخر في الأسرة) */
+  function mems(p) {
+    if (p.cls && !p.classes) { p.classes = [Object.assign({ subjects: null, t: p.cls.joined || Date.now() }, p.cls)]; delete p.cls; }
+    return p.classes || [];
+  }
+  const activeMems = p => mems(p).filter(m => !m.left);
+  const primary = p => activeMems(p)[0] || null;
+  const gradeSubs = g => N().SUBJECTS.filter(s => s.grade === g);
+  const subjNames = (p, m) => !Array.isArray(m.subjects) ? 'كل المواد' : (gradeSubs(p.grade).filter(s => m.subjects.includes(s.id)).map(s => s.name).join('، ') || 'لا شيء');
+  function defaultSubjects(c, grade) {
+    const subs = gradeSubs(grade);
+    if (c.subject === ALL_SUBJ) return subs.map(s => s.id);
+    return subs.filter(s => s.name === c.subject).map(s => s.id);
+  }
+  const teacherLine = c => `${esc(c.teacherName || c.teacher || 'المعلم')}${c.subject ? ' · ' + esc(c.subject === ALL_SUBJ ? 'مربي الفصل' : 'معلم ' + c.subject) : ''}`;
+  const subjBoxes = (p, chosen) => `<div class="sc-subjs">${gradeSubs(p.grade).map(s => `<label><input type="checkbox" data-subj value="${s.id}" ${chosen.includes(s.id) ? 'checked' : ''}> ${s.icon} ${esc(s.name)}</label>`).join('') || '<small class="muted">لا توجد مواد لهذا الصف بعد.</small>'}</div>`;
   function parentHtml(people) {
     if (!enabled()) return '';
     const inv = pendingInvite();
-    const inClass = people.filter(p => p.cls);
+    const rows = people.flatMap(p => activeMems(p).map(m => ({ p, m })));
     let h = '';
     if (inv) {
       if (!inviteInfo || inviteInfo.id !== inv) { h += '<section class="card sc-invite" id="sc-inv"><p class="muted">⏳ جارٍ تحميل دعوة الفصل…</p></section>'; }
       else if (!inviteInfo.ok) h += `<section class="card sc-invite"><p>دعوة الفصل غير صالحة أو أُغلق الانضمام.</p><button type="button" class="btn ghost small" data-inv-x>إغلاق</button></section>`;
       else {
         const c = inviteInfo.c;
-        h += `<section class="card sc-invite"><h2>🏫 دعوة من ${esc(c.teacherName || 'المعلم')}</h2>
+        h += `<section class="card sc-invite"><h2>🏫 دعوة من ${teacherLine(c)}</h2>
           <p style="margin:0">فصل <b>${esc(c.grade)} / ${esc(c.section)}</b>${c.title ? ' · ' + esc(c.title) : ''} · ${esc(c.schoolName)} (${esc(c.region)})</p>
-          <p class="muted" style="margin:0">عند القبول يرى المعلم وإدارة المدرسة نشاط ابنك ودرجاته وتفاصيل اختباراته، ويدخل منافسة الفصل والمدرسة والمنطقة.</p>
-          <fieldset class="sc-kids"><legend>اختر الأبناء المنضمين لهذا الفصل</legend>${people.map(p => `<label><input type="checkbox" value="${p.id}" ${p.grade === c.grade ? 'checked' : ''}> ${esc(p.name)} <small>(${esc(p.grade)})</small>${p.cls && p.cls.cid !== inv ? ' <small class="muted">· سينتقل من فصله الحالي</small>' : ''}</label>`).join('')}</fieldset>
+          <p class="muted" style="margin:0">اختر الأبناء، ولكل ابن المواد التي يرى المعلم نشاطه ودرجاته وتفاصيل اختباراته فيها. المواد الأخرى لا تُرسل للمعلم. يدخل الابن أيضاً منافسة الفصل والمدرسة والمنطقة.</p>
+          <div class="sc-kidlist">${people.map(p => { const has = activeMems(p).find(m => m.cid === c.id); const chosen = has && Array.isArray(has.subjects) ? has.subjects : defaultSubjects(c, p.grade); return `<div class="sc-kid" data-kidrow="${p.id}">
+            <label class="sc-kid-head"><input type="checkbox" data-kidpick value="${p.id}" ${p.grade === c.grade ? 'checked' : ''}> <b>${esc(p.name)}</b> <small>(${esc(p.grade)})</small>${has ? ' <small class="muted">· منضم بالفعل، سيتم تحديث المواد</small>' : ''}</label>
+            <small class="muted">المواد المسموحة للمعلم:</small>${subjBoxes(p, chosen)}</div>`; }).join('')}</div>
           <div class="db-btns"><button type="button" class="btn" data-inv-ok>قبول الدعوة</button><button type="button" class="btn ghost" data-inv-x>رفض</button></div></section>`;
       }
     }
-    if (inClass.length) h += `<section class="card"><h2>🏫 المدرسة والفصل</h2><ul class="pg-list">${inClass.map(p => `<li><div><b>${esc(p.name)}</b><small>${esc(p.cls.school)} · ${esc(p.cls.grade || p.grade)} / ${esc(p.cls.section)} · ${esc(p.cls.teacher || '')}</small></div><button type="button" class="linkish" data-leave="${p.id}">إلغاء الانضمام</button></li>`).join('')}</ul></section>`;
+    if (rows.length) h += `<section class="card"><h2>🏫 المعلمون والفصول</h2><ul class="pg-list">${rows.map(({ p, m }) => `<li><div><b>${esc(p.name)} ← ${esc(m.teacher || 'المعلم')}${m.subject ? ` <small>(${esc(m.subject === ALL_SUBJ ? 'مربي الفصل' : m.subject)})</small>` : ''}</b>
+        <small>${esc(m.school)} · ${esc(m.grade || p.grade)} / ${esc(m.section)} · يرى: ${esc(subjNames(p, m))}</small></div>
+        <button type="button" class="btn ghost small" data-subjedit="${p.id}|${m.cid}">المواد المسموحة</button><button type="button" class="linkish" data-leave="${p.id}|${m.cid}">إلغاء الانضمام</button></li>`).join('')}</ul></section>`;
     return h;
   }
   async function bindParent(people, rerender) {
@@ -427,41 +463,69 @@
       let c = null; try { c = await db.get('classes/' + inv); } catch (e) { }
       inviteInfo = { id: inv, ok: !!(c && c.open), c }; rerender(); return;
     }
+    const after = msg => { NQ.persist(); if (window.NQGame && window.NQGame.onPersist) window.NQGame.onPersist(); if (msg) NQ.toast(msg); rerender(); };
     NQ.app.querySelectorAll('[data-inv-x]').forEach(b => b.onclick = () => { try { sessionStorage.removeItem(KEY_INV); } catch (e) { } inviteInfo = null; rerender(); });
     const ok = NQ.app.querySelector('[data-inv-ok]');
     if (ok) ok.onclick = async () => {
-      const ids = [...NQ.app.querySelectorAll('.sc-kids input:checked')].map(x => x.value);
-      if (!ids.length) return NQ.toast('اختر ابناً واحداً على الأقل');
+      const picks = [...NQ.app.querySelectorAll('[data-kidpick]:checked')].map(x => ({ id: x.value, subjects: [...NQ.app.querySelectorAll(`[data-kidrow="${x.value}"] [data-subj]:checked`)].map(y => y.value) }));
+      if (!picks.length) return NQ.toast('اختر ابناً واحداً على الأقل');
+      if (picks.some(x => !x.subjects.length)) return NQ.toast('اختر مادة واحدة على الأقل لكل ابن');
       ok.disabled = true;
       const c = inviteInfo.c;
       try {
-        for (const id of ids) {
+        for (const { id, subjects } of picks) {
           const p = NQ.store.profiles[id]; if (!p) continue;
-          if (p.cls && p.cls.cid !== c.id) await leave(p).catch(() => { });
-          p.cls = { cid: c.id, sid: c.sid, region: c.region, school: c.schoolName, grade: c.grade, section: c.section, teacher: c.teacherName || '', stage: stageOf(c.grade), doc: p.cls && p.cls.cid === c.id && p.cls.doc ? p.cls.doc : rid(16), joined: Date.now() };
-          await pushStudent(p, true);
+          const list = mems(p), old = list.find(m => m.cid === c.id);
+          const m = { cid: c.id, sid: c.sid, region: c.region, school: c.schoolName, grade: c.grade, section: c.section, teacher: c.teacherName || '', subject: c.subject || '', stage: stageOf(c.grade), doc: old && old.doc ? old.doc : rid(16), joined: old && !old.left ? old.joined : Date.now(), subjects, t: Date.now() };
+          p.classes = list.filter(x => x.cid !== c.id).concat(m);
+          await pushStudent(p, m, true);
         }
         try { sessionStorage.removeItem(KEY_INV); } catch (e) { } inviteInfo = null;
-        NQ.persist(); if (window.NQGame && window.NQGame.onPersist) window.NQGame.onPersist();
-        NQ.toast('تم الانضمام للفصل ✓'); rerender();
+        after('تم الانضمام للفصل ✓');
       } catch (e) { ok.disabled = false; NQ.toast(errTxt(e)); }
     };
+    const find = v => { const [pid, cid] = v.split('|'); const p = NQ.store.profiles[pid]; const m = p && activeMems(p).find(x => x.cid === cid); return { p, m }; };
     NQ.app.querySelectorAll('[data-leave]').forEach(b => b.onclick = async () => {
-      const p = NQ.store.profiles[b.dataset.leave]; if (!p) return;
-      if (!(await NQ.ask(`إلغاء انضمام ${p.name} للفصل؟ لن يرى المعلم درجاته بعد الآن.`, 'إلغاء الانضمام', true))) return;
-      try { await leave(p); delete p.cls; NQ.persist(); if (window.NQGame && window.NQGame.onPersist) window.NQGame.onPersist(); rerender(); } catch (e) { NQ.toast(errTxt(e)); }
+      const { p, m } = find(b.dataset.leave); if (!m) return;
+      if (!(await NQ.ask(`إلغاء انضمام ${p.name} لفصل ${m.teacher || ''}؟ لن يرى المعلم درجاته بعد الآن.`, 'إلغاء الانضمام', true))) return;
+      try { await db.del('classes/' + m.cid + '/students/' + m.doc); m.left = Date.now(); m.t = Date.now(); after('تم إلغاء الانضمام'); } catch (e) { NQ.toast(errTxt(e)); }
+    });
+    NQ.app.querySelectorAll('[data-subjedit]').forEach(b => b.onclick = () => {
+      const { p, m } = find(b.dataset.subjedit); if (!m) return;
+      const chosen = Array.isArray(m.subjects) ? m.subjects : gradeSubs(p.grade).map(s => s.id);
+      const ov = document.createElement('div'); ov.className = 'overlay';
+      ov.innerHTML = `<form class="card" role="dialog" aria-modal="true" aria-labelledby="se-t"><h2 id="se-t">المواد التي يراها ${esc(m.teacher || 'المعلم')}</h2>
+        <p class="muted" style="margin:0">لـ ${esc(p.name)} · ${esc(m.school)} · ${esc(m.grade)} / ${esc(m.section)}</p>${subjBoxes(p, chosen)}
+        <p class="hint" style="margin:0">المواد غير المختارة تُحذف من نسخة المعلم عند الحفظ.</p>
+        <div class="actions"><button type="button" class="btn ghost" data-x>إلغاء</button><button class="btn" type="submit">حفظ</button></div></form>`;
+      document.body.appendChild(ov);
+      ov.querySelector('[data-x]').onclick = () => ov.remove();
+      ov.querySelector('form').onsubmit = async e => {
+        e.preventDefault(); const subjects = [...ov.querySelectorAll('[data-subj]:checked')].map(x => x.value);
+        if (!subjects.length) return NQ.toast('اختر مادة واحدة على الأقل، أو ألغِ الانضمام');
+        m.subjects = subjects; m.t = Date.now();
+        try { await pushStudent(p, m, true); ov.remove(); after('تم تحديث المواد ✓'); } catch (x) { NQ.toast(errTxt(x)); }
+      };
     });
   }
-  async function leave(p) { if (p.cls && p.cls.doc) await db.del('classes/' + p.cls.cid + '/students/' + p.cls.doc); }
 
-  /* ----- مشاركة درجات الطالب مع فصله ----- */
+  /* ----- مشاركة درجات الطالب مع معلمه: المواد المسموحة فقط ----- */
   const sent = {};
-  const shareable = p => { const x = JSON.parse(JSON.stringify(p)); delete x.pinHash; delete x.cls; delete x.rewards; delete x.msg; delete x.limits; return x; };
-  async function pushStudent(p, force) {
-    if (!p.cls || !p.cls.doc) return;
-    const json = JSON.stringify(shareable(p)), key = p.cls.cid + '/' + p.cls.doc;
+  function shareable(p, m) {
+    const ok = Array.isArray(m.subjects) ? new Set(m.subjects) : null, has = id => !ok || ok.has(id);
+    const pick = o => Object.fromEntries(Object.entries(o || {}).filter(([k]) => has(k)));
+    const x = { id: p.id, name: p.name, grade: p.grade, avatar: p.avatar, created: p.created, goal: p.goal };
+    x.records = (p.records || []).filter(r => has(r.subjectId));
+    x.wrong = pick(p.wrong);
+    x.srs = Object.fromEntries(Object.entries(p.srs || {}).filter(([, e]) => e && has(e.s)));
+    x._allowed = ok ? [...ok] : null;
+    return x;
+  }
+  async function pushStudent(p, m, force) {
+    if (!m || !m.doc || m.left) return;
+    const json = JSON.stringify(shareable(p, m)), key = m.cid + '/' + m.doc;
     if (!force && sent[key] === json) return;
-    await db.set('classes/' + p.cls.cid + '/students/' + p.cls.doc, { json, name: String(p.name || '').slice(0, 60), grade: p.grade || '', updated: Date.now() });
+    await db.set('classes/' + m.cid + '/students/' + m.doc, { json, name: String(p.name || '').slice(0, 60), grade: p.grade || '', updated: Date.now() });
     sent[key] = json;
   }
   let pushT = null;
@@ -469,8 +533,15 @@
     if (!enabled()) return;
     clearTimeout(pushT);
     pushT = setTimeout(async () => {
-      for (const p of Object.values(N().store.profiles)) if (p.cls) { try { await pushStudent(p); } catch (e) { /* يُعاد عند الحفظ القادم */ } }
+      for (const p of Object.values(N().store.profiles)) for (const m of activeMems(p)) { try { await pushStudent(p, m); } catch (e) { /* يُعاد عند الحفظ القادم */ } }
     }, 4000);
+  }
+  // دمج عضويات الفصول بين أجهزة الأسرة: الأحدث لكل فصل يفوز
+  function merge(t, src) {
+    const a = mems(t), b = mems(src); if (!b.length) return;
+    const by = new Map(a.map(m => [m.cid, m]));
+    b.forEach(m => { const cur = by.get(m.cid); if (!cur || (m.t || 0) > (cur.t || 0)) by.set(m.cid, m); });
+    t.classes = [...by.values()];
   }
 
   /* ================= التوجيه ================= */
@@ -484,5 +555,5 @@
     return false;
   }
 
-  window.NQSchools = { enabled, route, parentHtml, bindParent, onPersist, stageOf, REGIONS, STAGES, ALL_GRADES, _db: db };
+  window.NQSchools = { enabled, route, parentHtml, bindParent, onPersist, merge, primary, stageOf, REGIONS, STAGES, ALL_GRADES, _db: db };
 })();
