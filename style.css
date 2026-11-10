@@ -873,3 +873,36 @@ main:has(> .pr-page){max-width:1240px}
   .px-link .px-qr-img{width:200px;height:200px}
   .px-choose{gap:10px}
 }
+
+/* ===== المدارس والمعلمون (schools.js) ===== */
+.sc-page .card{margin-bottom:14px}
+.sc-grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;align-items:start}
+.sc-signin{display:flex;flex-direction:column;gap:12px}
+.sc-google{justify-content:center;gap:10px;min-height:48px}
+.sc-or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:.85rem}
+.sc-or::before,.sc-or::after{content:"";flex:1;height:1px;background:var(--line)}
+.sc-row{display:flex;gap:8px;flex-wrap:wrap}
+.sc-help h2{margin-top:0}
+.sc-form{max-width:640px}
+.sc-stages,.sc-kids{border:0;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px 16px;flex:1 1 100%}
+.sc-stages legend,.sc-kids legend{font-size:.85rem;color:var(--muted);font-weight:700;padding:0;margin-bottom:4px}
+.sc-stages label,.sc-kids label{display:flex;align-items:center;gap:6px;min-height:40px;cursor:pointer}
+.sc-classes{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:14px}
+.sc-class{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:14px;min-height:44px;border:1.5px solid var(--line);border-radius:14px;background:var(--card);color:var(--ink);font:inherit;cursor:pointer;text-align:start}
+.sc-class b{font-size:1.05rem}
+.sc-class small{color:var(--muted)}
+.sc-class:hover{border-color:var(--brand)}
+.sc-table td,.sc-table th{white-space:nowrap}
+.sc-rank-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.sc-mini{margin:6px 0 0;padding-inline-start:20px;display:flex;flex-direction:column;gap:4px}
+.sc-mini li span{flex:1}
+.sc-mini li{display:list-item}
+.sc-mini li b{float:inline-end;font-variant-numeric:tabular-nums}
+.sc-invite{border:2px solid var(--brand);display:flex;flex-direction:column;gap:10px}
+.sc-invite h2{margin:0}
+.px-link-url{margin:0;font-size:.8rem;overflow-wrap:anywhere}
+.gm-scopes{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.gm-scope{min-height:44px;padding:0 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-weight:700;cursor:pointer}
+.gm-scope.on{border-color:var(--brand);background:var(--brand);color:var(--brand-ink)}
+.gm-scope:disabled{opacity:.45;cursor:not-allowed}
+@media (max-width:600px){.gm-scopes{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}.gm-scope{flex:none}}

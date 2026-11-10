@@ -6,7 +6,7 @@
     'الصف الثامن': ['social-studies.js', 'social-8-u1-u2.js', 'social-8-u4-u5.js', 'arabic-8.js', 'math-8.js', 'science-8.js', 'english-8.js', 'islamic-8.js'],
     'الصف العاشر': ['physics-10.js', 'chemistry-10.js', 'biology-10.js', 'math-10.js', 'arabic-10.js', 'english-10.js', 'islamic-10.js', 'quran-10.js', 'kuwait-10.js', 'explain-10.js', 'extra-10.js']
   };
-  const V = '20261111c';
+  const V = '20261111d';
   window.NQ_GRADES = Object.keys(GRADE_FILES);
   const add = src => new Promise((res, rej) => {
     const s = document.createElement('script'); s.src = src + '?v=' + V; s.async = false;
@@ -31,7 +31,7 @@
   } catch (e) { }
   const fail = e => { const a = document.getElementById('app'); if (a) a.innerHTML = '<p class="empty">⚠️ ' + (e && e.message || 'تعذّر تحميل الموقع') + '. تأكد من الاتصال ثم أعد تحميل الصفحة.</p>'; };
   Promise.all([helpers, ...[...need].map(window.NQLoadGrade)])
-    .then(() => Promise.all(['welcome.js', 'family.js', 'reports.js', 'game.js', 'parent.js', 'app.js'].map(add)))
+    .then(() => Promise.all(['welcome.js', 'family.js', 'reports.js', 'schools.js', 'game.js', 'parent.js', 'app.js'].map(add)))
     .catch(fail);
 
   // تطبيق على الموبايل: العمل بدون إنترنت + زر التثبيت

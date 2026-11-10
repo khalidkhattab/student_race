@@ -86,6 +86,7 @@
   function persist() {
     Object.values(store.profiles).forEach(p => { if (p.records.length > MAX_RECORDS) p.records = p.records.slice(-MAX_RECORDS); });
     local.set(KEY_STORE, store);
+    if (window.NQSchools) window.NQSchools.onPersist();
     if (!cloud) return;
     G('onPersist');
     const body = { v: 2, profiles: store.profiles, parent: store.parent || null, updated: Date.now() };
@@ -320,6 +321,12 @@
       if (!ok) { go('#parent'); return; }
       return window.NQReports.renderPage();
     }
+    // المدارس والمعلمون ودعوات الفصول (لا تحتاج حساب طالب)
+    if (window.NQSchools && /^(staff|admin|school-request|class-)/.test(h)) {
+      clearInterval(timerId);
+      document.querySelectorAll('[data-nav]').forEach(a => a.classList.remove('active'));
+      if (window.NQSchools.route(h)) return;
+    }
     if (h === 'login' || !cur()) {
       clearInterval(timerId);
       if (h !== 'login') { history.replaceState(null, '', '#login'); lastHash = '#login'; }
@@ -535,7 +542,7 @@
     $app.innerHTML = `
       <section class="login">
         <h1>من سيذاكر الآن؟</h1>
-        <p class="sub">كل طالب له صورته ورقمه السري وسجل درجات خاص به، حتى لو استخدمتم نفس الجهاز. <a href="#parent" class="linkish">👨‍👩‍👧 دخول ولي الأمر</a>${window.NQFamily && window.NQFamily.enabled() ? ' · <button type="button" class="linkish" id="fam-join">📱 عندي كود أسرة من جهاز آخر</button>' : ''}</p>
+        <p class="sub">كل طالب له صورته ورقمه السري وسجل درجات خاص به، حتى لو استخدمتم نفس الجهاز. <a href="#parent" class="linkish">👨‍👩‍👧 دخول ولي الأمر</a>${window.NQFamily && window.NQFamily.enabled() ? ' · <button type="button" class="linkish" id="fam-join">📱 عندي كود أسرة من جهاز آخر</button>' : ''}${window.NQSchools && window.NQSchools.enabled() ? ' · <a href="#staff" class="linkish">🏫 دخول المعلمين والمدارس</a>' : ''}</p>
 
         <div class="card step">
           <h2><span class="stepn">1</span> اختر صفك</h2>

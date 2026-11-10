@@ -299,6 +299,8 @@
     return {
       pid: p.id, name: p.hidden ? 'طالب' : firstName(p.name), avatar: p.hidden ? null : (p.avatar == null ? null : p.avatar),
       grade: p.grade, hidden: !!p.hidden, team: p.team || null, xp, level: L.i, week: wk, weekXp: xpIn(p, wk),
+      stage: window.NQSchools ? window.NQSchools.stageOf(p.grade) : null,
+      cls: p.cls ? { cid: p.cls.cid, sid: p.cls.sid, region: p.cls.region, school: p.cls.school, section: p.cls.section } : null,
       weekAvg: a.avg, weekN: a.n, prevAvg: b.avg, prevN: b.n, subj,
       daily: p.daily && p.daily[d] ? Object.assign({ date: d }, p.daily[d]) : null, duels, updated: Date.now()
     };
@@ -315,13 +317,45 @@
   const fresh = e => e.week === weekKey();
   const loading = () => '<p class="empty">⏳ جارٍ تحميل الترتيب…</p>';
 
-  let boardTab = 'all', boardSubj = '';
+  let boardTab = 'all', boardSubj = '', boardScope = null, boardLevel = 'grade';
+  // ترتيب المدارس: مجموع نقاط أفضل 20 طالباً هذا الأسبوع ÷ 20 (أي متوسط أفضل 20، والمقعد الفارغ = صفر)
+  function schoolsHtml(list, mySid) {
+    const by = {};
+    list.filter(e => e.cls && e.cls.sid && fresh(e) && (e.weekXp || 0) > 0).forEach(e => { (by[e.cls.sid] = by[e.cls.sid] || { name: e.cls.school, region: e.cls.region, xs: [] }).xs.push(e.weekXp); });
+    const rows = Object.entries(by).map(([sid, v]) => ({ sid, ...v, n: v.xs.length, score: Math.round(v.xs.sort((a, b) => b - a).slice(0, 20).reduce((a, b) => a + b, 0) / 20) })).sort((a, b) => b.score - a.score);
+    if (!rows.length) return '<p class="empty">لا توجد مدارس في الترتيب هذا الأسبوع بعد.</p>';
+    const me = rows.findIndex(r => r.sid === mySid);
+    return `${me >= 0 ? `<p class="gm-mine">ترتيب مدرستك: <b>${medal(me)}</b> من ${num(rows.length)}</p>` : ''}<p class="hint">النتيجة = متوسط نقاط أفضل 20 طالباً في المدرسة هذا الأسبوع.</p>
+      <ol class="gm-board">${rows.slice(0, 50).map((r, i) => `<li class="${r.sid === mySid ? 'me' : ''}"><span class="gm-rank">${medal(i)}</span><span class="av" aria-hidden="true">🏫</span>
+        <span class="gm-nm"><b>${esc(r.name)}</b><small>${esc(r.region)} · ${num(r.n)} ${r.n === 1 ? 'طالب نشط' : 'طلاب نشطون'}</small></span><span class="gm-val">${num(r.score)} <small>نقطة</small></span></li>`).join('')}</ol>`;
+  }
   async function renderArena() {
     const NQ = N(), p = NQ.cur(), app = NQ.app;
     const subs = NQ.SUBJECTS.filter(s => s.grade === p.grade);
     const lg = leagueOf(totalXp(p));
+    const S = window.NQSchools, my = p.cls || null, myStage = S ? S.stageOf(p.grade) : null;
+    if (!boardScope || (!my && /^(class|school|region)$/.test(boardScope))) boardScope = my ? 'class' : 'all';
     const draw = (list) => {
-      let rows = (list || []).filter(e => e.grade === p.grade && !e.hidden);
+      const scopes = [['home', '🏠 البيت'], ['class', '👥 فصلي'], ['school', '🏫 مدرستي'], ['region', '🗺️ منطقتي'], ['all', '🇰🇼 كل المدارس']];
+      const levels = boardScope === 'school' ? [['grade', 'صفي'], ['stage', 'مرحلتي']] : (boardScope === 'region' || boardScope === 'all') ? [['grade', 'صفي'], ['stage', 'مرحلتي'], ['schools', 'أفضل المدارس']] : [];
+      if (!levels.some(l => l[0] === boardLevel)) boardLevel = 'grade';
+      const scopeUi = `<div class="gm-scopes" role="tablist" aria-label="مستوى المنافسة">${scopes.map(([k, t]) => { const off = !my && /^(class|school|region)$/.test(k); return `<button type="button" role="tab" aria-selected="${boardScope === k}" class="gm-scope${boardScope === k ? ' on' : ''}" data-sc="${k}" ${off ? 'disabled' : ''}>${t}</button>`; }).join('')}</div>
+        ${!my && S && S.enabled() ? '<p class="hint">لتظهر منافسة الفصل والمدرسة والمنطقة: يقبل ولي أمرك دعوة الفصل التي يرسلها المعلم.</p>' : ''}
+        ${my && boardScope !== 'home' && boardScope !== 'all' ? `<p class="hint">${esc(my.school)} · ${esc(my.region)}${boardScope === 'class' ? ' · فصل ' + esc(my.section) : ''}</p>` : ''}
+        ${levels.length ? `<div class="gm-filters" role="tablist" aria-label="نطاق الترتيب">${levels.map(([k, t]) => `<button type="button" role="tab" aria-selected="${boardLevel === k}" class="gm-chip${boardLevel === k ? ' on' : ''}" data-lv="${k}">${t}</button>`).join('')}</div>` : ''}`;
+      if (boardLevel === 'schools') {
+        const pool = (list || []).filter(e => boardScope !== 'region' || (e.cls && my && e.cls.region === my.region));
+        return scopeUi + schoolsHtml(pool, my && my.sid);
+      }
+      let rows = list || [];
+      if (boardScope === 'home') rows = rows.filter(e => NQ.store.profiles[e.pid]);
+      else {
+        if (boardScope === 'class') rows = rows.filter(e => e.cls && my && e.cls.cid === my.cid);
+        if (boardScope === 'school') rows = rows.filter(e => e.cls && my && e.cls.sid === my.sid);
+        if (boardScope === 'region') rows = rows.filter(e => e.cls && my && e.cls.region === my.region);
+        rows = boardLevel === 'stage' ? rows.filter(e => (e.stage || (S && S.stageOf(e.grade))) === myStage) : rows.filter(e => e.grade === p.grade);
+        rows = rows.filter(e => !e.hidden || e.pid === p.id);
+      }
       let val = e => fresh(e) ? (e.weekXp || 0) : 0, unit = 'نقطة', note = '';
       if (boardTab === 'league') { rows = rows.filter(e => leagueOf(e.xp || 0).id === lg.id); note = `${lg.icon} تنافس الطلاب في ${lg.name} فقط`; }
       if (boardTab === 'improved') {
@@ -334,7 +368,8 @@
       }
       rows = rows.map(e => ({ e, v: val(e) })).filter(x => boardTab === 'improved' || x.v > 0 || x.e.pid === p.id).sort((a, b) => b.v - a.v);
       const meIdx = rows.findIndex(x => x.e.pid === p.id);
-      return `
+      const extra = e => (boardLevel === 'stage' || boardScope === 'home' ? ' · ' + esc(e.grade) : '') + (e.cls && (boardScope === 'region' || boardScope === 'all') ? ' · 🏫 ' + esc(e.cls.school) : '');
+      return scopeUi + `
         <div class="gm-filters" role="tablist">
           ${[['all', 'الكل'], ['league', lg.icon + ' دوري'], ['improved', '📈 الأكثر تحسناً'], ['subject', '📚 حسب المادة']].map(([k, t]) => `<button type="button" role="tab" aria-selected="${boardTab === k}" class="gm-chip${boardTab === k ? ' on' : ''}" data-bt="${k}">${t}</button>`).join('')}
           ${boardTab === 'subject' ? `<select id="bsub" aria-label="المادة">${subs.map(s => `<option value="${s.id}" ${s.id === boardSubj ? 'selected' : ''}>${s.icon} ${esc(s.name)}</option>`).join('')}</select>` : ''}
@@ -343,7 +378,7 @@
         ${meIdx >= 0 ? `<p class="gm-mine">ترتيبك: <b>${medal(meIdx)}</b> من ${num(rows.length)}</p>` : ''}
         ${rows.length ? `<ol class="gm-board">${rows.slice(0, 50).map((x, i) => `<li class="${x.e.pid === p.id ? 'me' : ''}">
             <span class="gm-rank">${medal(i)}</span>${avatarOfEntry(x.e)}
-            <span class="gm-nm"><b>${esc(x.e.name)}${x.e.pid === p.id ? ' (أنت)' : ''}</b><small>${LEVELS[x.e.level || 0].icon} ${esc(LEVELS[x.e.level || 0].name)}${x.e.team ? ' · 👥 ' + esc(x.e.team.name) : ''}</small></span>
+            <span class="gm-nm"><b>${esc(x.e.name)}${x.e.pid === p.id ? ' (أنت)' : ''}</b><small>${LEVELS[x.e.level || 0].icon} ${esc(LEVELS[x.e.level || 0].name)}${extra(x.e)}${x.e.team ? ' · 👥 ' + esc(x.e.team.name) : ''}</small></span>
             <span class="gm-val">${boardTab === 'improved' ? (x.v > 0 ? '+' : '') + num(x.v) : num(x.v)} <small>${unit}</small></span></li>`).join('')}</ol>`
           : '<p class="empty">لا يوجد ترتيب بعد هذا الأسبوع. كن أول من يحصل على نقاط! 🚀</p>'}`;
     };
@@ -355,6 +390,8 @@
     const body = () => document.getElementById('bbody');
     const bind = () => {
       app.querySelectorAll('[data-bt]').forEach(b => b.onclick = () => { boardTab = b.dataset.bt; body().innerHTML = draw(Backend.cache); bind(); });
+      app.querySelectorAll('[data-sc]').forEach(b => b.onclick = () => { boardScope = b.dataset.sc; body().innerHTML = draw(Backend.cache); bind(); });
+      app.querySelectorAll('[data-lv]').forEach(b => b.onclick = () => { boardLevel = b.dataset.lv; body().innerHTML = draw(Backend.cache); bind(); });
       const s = document.getElementById('bsub'); if (s) s.onchange = () => { boardSubj = s.value; body().innerHTML = draw(Backend.cache); bind(); };
     };
     document.getElementById('brf').onclick = async () => { body().innerHTML = loading(); body().innerHTML = draw(await Backend.list(true)); bind(); };
@@ -724,6 +761,7 @@
     const hour = new Date().getHours();
     app.innerHTML = `<section class="pr-page">
       ${parentHeader({ title: 'هذا الأسبوع في البيت', line: `${hour < 12 ? 'صباح الخير' : 'مساء الخير'} · ${num(people.length)} ${people.length === 1 ? 'طالب' : 'أبناء'} · ${num(tot.n)} اختباراً · ${num(tot.q)} سؤالاً · ${num(Math.round(tot.s / 60))} دقيقة مذاكرة في آخر 7 أيام` })}
+      ${window.NQSchools ? window.NQSchools.parentHtml(people) : ''}
       ${alerts.length ? `<section class="pr-alerts" aria-label="تنبيهات">${alerts.slice(0, 6).map(a => `<div class="pr-alert ${a.cls}"><div><b>${a.t}</b><small>${a.s}</small></div>
         ${a.give ? `<button type="button" class="btn small" data-give="${a.give}">سلّمتها ✓</button>` : `<button type="button" class="btn ghost small" data-kid="${a.pid}">عرض</button>`}</div>`).join('')}</section>` : ''}
       ${people.length ? `<section class="pr-kids">${sums.map(({ p, k }) => {
@@ -748,6 +786,7 @@
     </section>`;
     bindParentHeader();
     if (window.NQP) window.NQP.bindFamily();
+    if (window.NQSchools) window.NQSchools.bindParent(people, () => renderParent());
     app.querySelectorAll('[data-kid]').forEach(b => b.onclick = () => { parentKid = b.dataset.kid; renderParent(); window.scrollTo(0, 0); });
     app.querySelectorAll('[data-give]').forEach(b => b.onclick = () => {
       const [pid, rid] = b.dataset.give.split('|'), r = (NQ.store.profiles[pid].rewards || []).find(x => x.id === rid);
