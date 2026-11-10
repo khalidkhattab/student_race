@@ -817,3 +817,16 @@ main:has(> .pr-page){max-width:1240px}
 .q-fig{margin:4px 0 14px;display:flex;justify-content:center}
 .q-fig img{max-width:100%;max-height:300px;border-radius:12px;background:#fff;border:1px solid var(--line);padding:8px}
 .q-fig.sm img{max-height:160px}
+
+/* طرق ربط الأجهزة: رابط + QR */
+.px-fam-ways{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.px-fam-way{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:14px 16px;min-height:44px;border-radius:14px;border:1.5px solid var(--brand);background:var(--brand-soft);color:var(--ink);font:inherit;cursor:pointer;text-align:start}
+.px-fam-way span{font-size:1.5rem}
+.px-fam-way b{color:var(--brand)}
+.px-fam-way small{color:var(--muted)}
+.px-fam-way:hover{background:var(--card)}
+.px-fam-qr{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+.px-fam-qr[hidden]{display:none}
+.px-qr-img{width:min(260px,80vw);background:#fff;padding:8px;border-radius:14px;border:1px solid var(--line)}
+.px-qr-img svg{display:block;width:100%;height:auto}
+.px-fam-manual summary{cursor:pointer;color:var(--brand);font-weight:700;min-height:36px;display:flex;align-items:center}

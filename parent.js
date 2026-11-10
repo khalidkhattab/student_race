@@ -421,13 +421,46 @@
     const state = !NQ.synced ? '⏳ جارٍ الاتصال بحساب الأسرة…' : st.err ? '⚠️ تعذّر الحفظ الآن، سيُعاد المحاولة تلقائياً' : st.pending ? '⏳ جارٍ الحفظ…' : `☁️ كل البيانات محفوظة${st.lastSync ? ' · آخر مزامنة ' + new Date(st.lastSync).toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit' }) : ''}`;
     return `<section class="card px-card px-family">
       <div class="pg-row"><h2>📱 ربط أجهزة الأسرة</h2><small class="muted">${state}</small></div>
-      <p class="muted" style="margin:0">درجات الأبناء ولوحة ولي الأمر محفوظة في حساب الأسرة. لمتابعتهم من موبايلك أو جهاز آخر: افتح الموقع هناك، واختر «عندي كود أسرة من جهاز آخر»، واكتب هذا الكود:</p>
-      <div class="px-fam-code"><b dir="ltr">${F.pretty(c)}</b><button type="button" class="btn ghost small" id="fam-copy">نسخ الكود</button><button type="button" class="btn ghost small" id="fam-other">عندي كود آخر</button></div>
-      <p class="hint" style="margin:0">🔒 الكود هو مفتاح بيانات الأسرة، فلا ترسله إلا لأفراد الأسرة.</p>
+      <p class="muted" style="margin:0">درجات الأبناء ولوحة ولي الأمر محفوظة في حساب الأسرة. لمتابعتهم من موبايلك أو جهاز آخر اختر أسهل طريقة:</p>
+      <div class="px-fam-ways">
+        <button type="button" class="px-fam-way" id="fam-share"><span aria-hidden="true">🔗</span><b>أرسل رابط الربط</b><small>بالواتساب أو أي تطبيق، ثم اضغط عليه في الجهاز الآخر</small></button>
+        <button type="button" class="px-fam-way" id="fam-qr"><span aria-hidden="true">📷</span><b>اعرض كود QR</b><small>صوّره بكاميرا الموبايل الآخر</small></button>
+      </div>
+      <div id="fam-qr-box" class="px-fam-qr" hidden></div>
+      <details class="px-fam-manual"><summary>أو اكتب الكود يدوياً</summary>
+        <p class="muted" style="margin:8px 0">افتح الموقع في الجهاز الآخر، واختر «عندي كود أسرة من جهاز آخر»، واكتب:</p>
+        <div class="px-fam-code"><b dir="ltr">${F.pretty(c)}</b><button type="button" class="btn ghost small" id="fam-copy">نسخ الكود</button><button type="button" class="btn ghost small" id="fam-other">عندي كود آخر</button></div>
+      </details>
+      <p class="hint" style="margin:0">🔒 الرابط والكود هما مفتاح بيانات الأسرة، فلا ترسلهما إلا لأفراد الأسرة.</p>
     </section>`;
   }
+  const joinUrl = () => location.origin + location.pathname + '#join-' + window.NQFamily.code();
+  let qrLib = null;
+  const loadQr = () => qrLib || (qrLib = new Promise((res, rej) => {
+    if (window.qrcode) return res();
+    const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+    s.onload = res; s.onerror = () => { qrLib = null; rej(new Error('qr')); }; document.head.appendChild(s);
+  }));
   function bindFamily() {
     const F = window.NQFamily; if (!F || !F.enabled()) return;
+    const sh = document.getElementById('fam-share');
+    if (sh) sh.onclick = async () => {
+      const url = joinUrl(), text = 'رابط ربط جهازك بحساب أسرتنا في منصة اختباراتي (لا ترسله لأحد خارج الأسرة):';
+      if (navigator.share) { try { await navigator.share({ title: 'منصة اختباراتي', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+      try { await navigator.clipboard.writeText(url); N().toast('تم نسخ رابط الربط ✓ الصقه في رسالة لنفسك أو لأحد أفراد الأسرة'); }
+      catch (e) { window.open('https://wa.me/?text=' + encodeURIComponent(text + '\n' + url), '_blank', 'noopener'); }
+    };
+    const qb = document.getElementById('fam-qr'), box = document.getElementById('fam-qr-box');
+    if (qb) qb.onclick = async () => {
+      if (!box.hidden) { box.hidden = true; return; }
+      box.hidden = false; box.innerHTML = '<p class="muted">⏳ جارٍ تجهيز الكود…</p>';
+      try {
+        await loadQr();
+        const q = window.qrcode(0, 'M'); q.addData(joinUrl()); q.make();
+        box.innerHTML = `<div class="px-qr-img" role="img" aria-label="كود QR لربط جهاز آخر بحساب الأسرة">${q.createSvgTag({ cellSize: 6, margin: 4, scalable: true })}</div>
+          <p class="muted" style="margin:0">افتح كاميرا الموبايل الآخر ووجّهها على الكود، ثم اضغط على الرابط الذي يظهر.</p>`;
+      } catch (e) { box.innerHTML = '<p class="muted">تعذّر تجهيز كود QR (يحتاج اتصالاً بالإنترنت). استخدم «أرسل رابط الربط» بدلاً منه.</p>'; }
+    };
     const cp = document.getElementById('fam-copy');
     if (cp) cp.onclick = async () => { try { await navigator.clipboard.writeText(F.pretty(F.code())); N().toast('تم نسخ الكود ✓'); } catch (e) { N().toast(F.pretty(F.code())); } };
     const ot = document.getElementById('fam-other'); if (ot) ot.onclick = () => N().familyJoinDialog();

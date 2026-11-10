@@ -152,6 +152,32 @@
       err.textContent = r === 'short' ? 'الكود ناقص، اكتبه كاملاً.' : r === 'missing' ? 'لم نجد هذا الكود. تأكد منه.' : r === 'off' ? 'الربط غير متاح هنا.' : 'تعذّر الاتصال. حاول مرة أخرى.';
     };
   }
+  function familyLinkJoin(code) {
+    const F = window.NQFamily;
+    if (!F || !F.enabled()) return toast('ربط الأسرة غير متاح في هذه النسخة');
+    const c = F.clean(code);
+    if (c.length < 16) return toast('رابط الربط غير صحيح');
+    if (cloud && F.code() === c) return toast('هذا الجهاز مربوط بهذه الأسرة بالفعل ✓');
+    document.querySelectorAll('.overlay.fam-link').forEach(x => x.remove());
+    const ov = document.createElement('div'); ov.className = 'overlay fam-link';
+    const mine = Object.values(store.profiles).length;
+    ov.innerHTML = `<div class="card" role="dialog" aria-modal="true" aria-labelledby="flt">
+      <h2 id="flt">📱 ربط هذا الجهاز بحساب الأسرة؟</h2>
+      <p class="sub" style="margin:0">ستظهر هنا حسابات الأبناء ودرجاتهم ولوحة ولي الأمر من الجهاز الذي أرسل الرابط.${mine ? ` والطلاب الموجودون على هذا الجهاز (${nf(mine)}) سيُضافون لنفس الأسرة.` : ''}</p>
+      <p class="hint" style="margin:0">وافق فقط إذا وصلك الرابط من أحد أفراد أسرتك.</p>
+      <p class="err" id="fle" role="alert"></p>
+      <div class="actions"><button type="button" class="btn ghost" data-x>إلغاء</button><button type="button" class="btn" data-ok>نعم، اربط الجهاز</button></div></div>`;
+    document.body.appendChild(ov);
+    ov.querySelector('[data-x]').onclick = () => ov.remove();
+    const ok = ov.querySelector('[data-ok]'); ok.focus();
+    ok.onclick = async () => {
+      const err = ov.querySelector('#fle'); ok.disabled = true; err.textContent = '⏳ جارٍ الربط…';
+      const r = await joinFamily(c);
+      if (r === 'ok') { ov.remove(); toast('تم ربط الجهاز بحساب الأسرة ✓'); route(); return; }
+      ok.disabled = false;
+      err.textContent = r === 'missing' ? 'لم نجد هذه الأسرة. اطلب رابطاً جديداً.' : 'تعذّر الاتصال. تأكد من الإنترنت وحاول مرة أخرى.';
+    };
+  }
   async function joinFamily(code) {
     const F = window.NQFamily; if (!F || !F.enabled()) return 'off';
     const c = F.clean(code); if (c.length < 16) return 'short';
@@ -266,7 +292,13 @@
 
   /* ---------- التوجيه (#home ، #subject-social ، #records ، #quiz ، #result) ---------- */
   function route() {
-    const h = location.hash.replace(/^#/, '') || 'welcome';
+    let h = location.hash.replace(/^#/, '') || 'welcome';
+    // رابط ربط الأسرة (#join-الكود): نخفي الكود من العنوان فوراً ثم نسأل قبل الربط
+    if (h.startsWith('join-')) {
+      const code = h.slice(5);
+      history.replaceState(null, '', '#login'); lastHash = '#login'; h = 'login';
+      setTimeout(() => familyLinkJoin(code), 0);
+    }
     const welcome = h === 'welcome' && typeof window.WELCOME_HTML === 'function';
     document.body.classList.toggle('welcome-mode', welcome);
     if (welcome) { clearInterval(timerId); return renderWelcome(); }
@@ -495,7 +527,7 @@
   }
 
   function renderLogin() {
-    if (!loginGrade) loginGrade = cur() ? cur().grade : null;
+    if (!loginGrade) loginGrade = cur() ? cur().grade : ((Object.values(store.profiles).find(p => GRADES.includes(p.grade)) || {}).grade || null);
     const people = Object.values(store.profiles)
       .filter(p => p.grade === loginGrade)
       .sort((a, b) => (b.records.length ? b.records[b.records.length - 1].date : b.created) - (a.records.length ? a.records[a.records.length - 1].date : a.created));
