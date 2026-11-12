@@ -380,7 +380,7 @@
       <h2>دروس تحتاج مراجعة</h2>
       ${weak.length ? `<table><thead><tr><th>الدرس</th><th>المادة</th><th>أفضل درجة</th></tr></thead><tbody>${weak.map(w => `<tr><td>${esc(w.name)}</td><td>${esc(w.s.name)}</td><td class="down">${num(w.pct)}٪</td></tr>`).join('')}</tbody></table>` : '<p>كل الدروس المحلولة درجتها 65٪ أو أكثر.</p>'}
       ${tasks.length ? `<h2>الواجبات</h2><table><thead><tr><th>الواجب</th><th>المادة</th><th>الحالة</th></tr></thead><tbody>${tasks.map(x => `<tr><td>${esc(x.t.title)}</td><td>${esc(x.s.name)}</td><td>${x.st.done ? (x.st.rec ? `<span class="up">تم · ${num(x.st.rec.pct)}٪</span>` : '<span class="up">تم</span>') : `<span class="${x.st.late ? 'down' : ''}">${dueTxt(x.t.due)}</span>`}</td></tr>`).join('')}</tbody></table>` : ''}
-      ${tips.length ? `<h2>ملاحظات</h2>${tips.map(t => `<p class="note">${esc(t)}</p>`).join('')}` : ''}
+      ${tips.length ? `<div class="rp-notes" style="break-inside:avoid;page-break-inside:avoid"><h2>ملاحظات</h2>${tips.map(t => `<p class="note">${esc(t)}</p>`).join('')}</div>` : ''}
       <p class="rp-foot">قِمّة · ${dt(new Date())}</p>
     </div>`;
   }
@@ -433,7 +433,7 @@
           image: { type: 'jpeg', quality: 0.95 },
           html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true, foreignObjectRendering: fo, scrollX: 0, scrollY: 0, x: 0, y: 0, windowWidth: 760 },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-          pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', 'h2', '.rp-kpis', '.rp-days', '.note'] }
+          pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', 'h2', '.rp-kpis', '.rp-days', '.rp-notes'] }
         }).from(box.querySelector('.rp')).outputPdf('blob');
         let blob;
         try { blob = await make(true); } catch (e) { blob = await make(false); }
