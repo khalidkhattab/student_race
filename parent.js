@@ -384,6 +384,16 @@
       <p class="rp-foot">قِمّة · ${dt(new Date())}</p>
     </div>`;
   }
+  // مكتبة تحويل الصفحة إلى PDF (تُحمّل عند أول استخدام فقط)
+  let pdfLib = null;
+  const loadPdfLib = () => pdfLib || (pdfLib = new Promise((res, rej) => {
+    if (window.html2pdf) return res();
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+    s.onload = () => window.html2pdf ? res() : rej(new Error('pdf'));
+    s.onerror = () => { pdfLib = null; rej(new Error('pdf')); };
+    document.head.appendChild(s);
+  }));
   function renderReport(p, back) {
     const NQ = N(), app = NQ.app;
     app.innerHTML = `<section class="pr-page px-report">
@@ -391,9 +401,9 @@
         <button type="button" class="btn ghost" id="px-back">→ رجوع للتقرير الكامل</button>
         <span style="flex:1"></span>
         <button type="button" class="btn ghost" id="px-print">🖨️ طباعة / PDF</button>
-        <button type="button" class="btn" id="px-dl">⬇ تنزيل التقرير</button>
+        <button type="button" class="btn" id="px-dl">⬇ تنزيل PDF</button>
       </div>
-      <p class="hint no-print" style="margin:0 0 12px">لإرساله للمدرس: نزّل التقرير ثم أرسل الملف، أو اختر «حفظ كـ PDF» من نافذة الطباعة.</p>
+      <p class="hint no-print" style="margin:0 0 12px">لإرساله للمدرس: نزّل التقرير كملف PDF ثم أرسله بالواتساب أو البريد.</p>
       <style>${REPORT_CSS}</style>${reportInner(p)}
     </section>`;
     document.getElementById('px-back').onclick = () => { api.view = null; back(); window.scrollTo(0, 0); };
@@ -402,13 +412,42 @@
       try { window.print(); } catch (e) { NQ.toast('الطباعة غير متاحة هنا، نزّل التقرير واطبعه'); }
       setTimeout(() => document.body.classList.remove('px-printing'), 500);
     };
+    // تنزيل التقرير كملف PDF (صفحات A4) يُرسم من التقرير الظاهر نفسه
     document.getElementById('px-dl').onclick = async () => {
-      const data = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>التقرير الأسبوعي - ${esc(p.name)}</title><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@700;800;900&family=Tajawal:wght@500;700&display=swap" rel="stylesheet"><style>body{margin:0;background:#f3f4ef;padding:16px}@media print{body{background:#fff;padding:0}@page{size:A4;margin:12mm}}${REPORT_CSS}</style></head><body>${reportInner(p)}</body></html>`;
-      const filename = 'تقرير-' + String(p.name).trim().replace(/\s+/g, '-') + '-' + ymd() + '.html';
-      let dl = null;
-      if (window.claude && typeof window.claude.use === 'function') { try { dl = await window.claude.use('downloads'); } catch (e) { } }
-      if (dl) { try { await dl.save({ filename, data }); NQ.toast('تم حفظ التقرير ✓'); } catch (e) { if (e && e.code !== 'declined') NQ.toast('تعذّر التنزيل هنا'); } return; }
-      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], { type: 'text/html' })); a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      const btn = document.getElementById('px-dl'), label = btn.textContent;
+      const filename = 'تقرير-' + String(p.name).trim().replace(/\s+/g, '-') + '-' + ymd() + '.pdf';
+      btn.disabled = true; btn.textContent = '⏳ جارٍ تجهيز PDF…';
+      let box = null;
+      try {
+        await loadPdfLib();
+        try { await document.fonts.ready; } catch (e) { }
+        // نسخة بعرض صفحة A4 خارج الشاشة حتى يكون الشكل واحداً على الكمبيوتر والموبايل
+        box = document.createElement('div');
+        box.setAttribute('aria-hidden', 'true');
+        box.style.cssText = 'position:absolute;left:0;top:0;z-index:-1;width:760px;background:#fff;direction:rtl';
+        box.innerHTML = `<style>${REPORT_CSS}.rp{max-width:none;border-radius:0;padding:8px 22px 8px 10px}</style>${reportInner(p)}`;
+        document.body.appendChild(box);
+        // الرسم عبر محرك المتصفح نفسه (foreignObject) يحافظ على تشكيل العربية والمسافات؛ وإن لم يدعمه المتصفح نرجع للرسم العادي
+        const make = fo => window.html2pdf().set({
+          margin: [10, 10, 12, 10], filename,
+          image: { type: 'jpeg', quality: 0.95 },
+          html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true, foreignObjectRendering: fo, scrollX: 0, scrollY: 0, x: 0, y: 0, windowWidth: 760 },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', 'h2', '.rp-kpis', '.rp-days', '.note'] }
+        }).from(box.querySelector('.rp')).outputPdf('blob');
+        let blob;
+        try { blob = await make(true); } catch (e) { blob = await make(false); }
+        let dl = null;
+        if (window.claude && typeof window.claude.use === 'function') { try { dl = await window.claude.use('downloads'); } catch (e) { } }
+        if (dl) { try { await dl.save({ filename, data: blob }); NQ.toast('تم حفظ التقرير ✓'); } catch (e) { if (e && e.code !== 'declined') NQ.toast('تعذّر التنزيل هنا'); } return; }
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+        NQ.toast('تم تنزيل التقرير PDF ✓');
+      } catch (e) {
+        NQ.toast('تعذّر تجهيز ملف PDF. استخدم «طباعة / PDF» واختر «حفظ كـ PDF».');
+      } finally {
+        if (box) box.remove();
+        btn.disabled = false; btn.textContent = label;
+      }
     };
   }
 
