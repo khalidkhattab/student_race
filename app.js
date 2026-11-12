@@ -1584,11 +1584,134 @@
 
       const q = deck[currentIdx];
       isFlipped = false;
-      const ansText = correctText(q);
       const progPct = Math.round((currentIdx / deck.length) * 100);
 
+      // تخصيص المحتوى الأمامي والخلفي بذكاء بحسب نوع السؤال
+      let kindTag = esc(q.kind || 'مفهوم');
+      let frontBodyHtml = '';
+      let frontHintText = 'انقر على البطاقة لقلبها ومعرفة الإجابة 🔄';
+      let backBodyHtml = '';
+
+      if (q.type === 'match') {
+        kindTag = '🏷️ تصنيف وتوصيل';
+        frontHintText = 'فكر في تصنيف كل عنصر ثم اقلب البطاقة للتحقق 🔄';
+        frontBodyHtml = `
+          <p class="fc-qtext">${esc(q.q)}</p>
+          <div class="fc-match-front">
+            <div class="fc-mf-label">العناصر المطلوب تصنيفها:</div>
+            <div class="fc-mf-items">
+              ${(q.items || []).map(it => `<span class="fc-item-chip">${esc(it[0])}</span>`).join('')}
+            </div>
+            <div class="fc-mf-label" style="margin-top:10px">التصنيفات المتاحة:</div>
+            <div class="fc-mf-cats">
+              ${(q.categories || []).map(c => `<span class="fc-cat-chip">🏷️ ${esc(c)}</span>`).join('')}
+            </div>
+          </div>
+        `;
+
+        const groups = (q.categories || []).map((cat, ci) => {
+          const catItems = (q.items || []).filter(it => it[1] === ci).map(it => it[0]);
+          return { cat, items: catItems };
+        });
+
+        backBodyHtml = `
+          <div style="width:100%">
+            <div style="font-size:.9rem;font-weight:700;color:var(--muted);margin-bottom:6px">التقسيم والتصنيف الصحيح:</div>
+            <div class="fc-match-groups">
+              ${groups.map(g => `
+                <div class="fc-group-card">
+                  <div class="fc-group-title">🏷️ ${esc(g.cat)} <small>(${g.items.length})</small></div>
+                  <ul class="fc-group-list">
+                    ${g.items.map(it => `<li><span class="fc-bullet">✓</span> ${esc(it)}</li>`).join('')}
+                  </ul>
+                </div>
+              `).join('')}
+            </div>
+            ${q.explain ? `<p class="fc-exp" style="margin-top:8px">💡 ${esc(q.explain)}</p>` : ''}
+          </div>
+        `;
+      } else if (q.type === 'fill') {
+        kindTag = '✏️ أكمل الفراغ';
+        const ans = (q.answers && q.answers[0]) || '';
+        const hasBlankPattern = /(\.{3,}|_{2,})/.test(q.q);
+        const qTextFormatted = hasBlankPattern
+          ? esc(q.q).replace(/(\.{3,}|_{2,})/g, '<span class="fc-blank-box">[ . . . . . ]</span>')
+          : esc(q.q);
+
+        frontBodyHtml = `
+          <p class="fc-qtext">${qTextFormatted}</p>
+          ${qImg(q, true)}
+        `;
+
+        let completedSentenceHtml = '';
+        if (hasBlankPattern) {
+          const completed = esc(q.q).replace(/(\.{3,}|_{2,})/g, `<strong class="fc-filled-word">${esc(ans)}</strong>`);
+          completedSentenceHtml = `<div class="fc-completed-sentence">« ${completed} »</div>`;
+        }
+
+        backBodyHtml = `
+          <div style="width:100%">
+            <b class="fc-ans">✓ ${esc(ans)}</b>
+            ${completedSentenceHtml}
+            ${q.answers && q.answers.length > 1 ? `<div class="fc-exp" style="margin-top:6px">إجابات بديلة مقبولة: ${esc(q.answers.slice(1).join(' أو '))}</div>` : ''}
+            ${q.explain ? `<p class="fc-exp" style="margin-top:8px">💡 ${esc(q.explain)}</p>` : ''}
+          </div>
+        `;
+      } else if (q.type === 'multi') {
+        kindTag = '☑️ اختيار متعدد';
+        frontBodyHtml = `
+          <p class="fc-qtext">${esc(q.q)}</p>
+          ${qImg(q, true)}
+          ${q.options && q.options.length ? `
+            <button type="button" class="btn ghost small fc-hint-toggle" id="fc-toggle-opts">💡 إظهار خيارات السؤال</button>
+            <div class="fc-opts-hint" id="fc-opts-box" style="display:none">
+              ${q.options.map((opt, oi) => `<div class="fc-opt-item"><span class="fc-opt-let">${LETTERS[oi] || (oi + 1)}</span><span>${esc(opt)}</span></div>`).join('')}
+            </div>
+          ` : ''}
+        `;
+
+        const correctList = (q.answers || []).map(ai => q.options[ai]).filter(Boolean);
+        backBodyHtml = `
+          <div style="width:100%">
+            <div style="font-size:.9rem;font-weight:700;color:var(--muted);margin-bottom:6px">الإجابات الصحيحة:</div>
+            <div class="fc-multi-answers">
+              ${correctList.map(t => `<div class="fc-multi-item">✓ ${esc(t)}</div>`).join('')}
+            </div>
+            ${q.explain ? `<p class="fc-exp" style="margin-top:8px">💡 ${esc(q.explain)}</p>` : ''}
+          </div>
+        `;
+      } else {
+        // MCQ / TF
+        const isTf = !!q.tf;
+        if (isTf) kindTag = '⚖️ صح أم خطأ';
+        const ansText = correctText(q);
+
+        frontBodyHtml = `
+          <p class="fc-qtext">${esc(q.q)}</p>
+          ${qImg(q, true)}
+          ${!isTf && q.options && q.options.length ? `
+            <button type="button" class="btn ghost small fc-hint-toggle" id="fc-toggle-opts">💡 إظهار الخيارات للتلميح</button>
+            <div class="fc-opts-hint" id="fc-opts-box" style="display:none">
+              ${q.options.map((opt, oi) => `<div class="fc-opt-item"><span class="fc-opt-let">${LETTERS[oi] || (oi + 1)}</span><span>${esc(opt)}</span></div>`).join('')}
+            </div>
+          ` : ''}
+        `;
+
+        const isWrongAnswer = isTf && (q.answer === 1 || ansText === 'خطأ' || ansText === 'خاطئة');
+        backBodyHtml = `
+          <div style="width:100%">
+            <b class="fc-ans">✓ ${esc(ansText)}</b>
+            ${isWrongAnswer && q.explain ? `
+              <div class="fc-correction">
+                <b>📌 تصويب العبارة:</b> ${esc(q.explain)}
+              </div>
+            ` : (q.explain ? `<p class="fc-exp" style="margin-top:8px">💡 ${esc(q.explain)}</p>` : '')}
+          </div>
+        `;
+      }
+
       ov.innerHTML = `
-        <div class="card" role="dialog" aria-modal="true" style="max-width:560px;width:100%;padding:22px">
+        <div class="card" role="dialog" aria-modal="true" style="max-width:600px;width:100%;padding:22px">
           <div class="fc-head">
             <div>
               <span class="kind">بطاقة ${currentIdx + 1} من ${deck.length}</span>
@@ -1602,16 +1725,15 @@
             <div class="fc-card" id="fc-card-inner">
               <div class="fc-face fc-front">
                 <div class="fc-head">
-                  <span class="chip-a">${esc(q.kind || 'مفهوم')}</span>
+                  <span class="chip-a">${kindTag}</span>
                   <button type="button" class="btn-tts" id="fc-tts" title="استمع للسؤال">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
                   </button>
                 </div>
                 <div class="fc-body">
-                  <p class="fc-qtext">${esc(q.q)}</p>
-                  ${qImg(q, true)}
+                  ${frontBodyHtml}
                 </div>
-                <p class="fc-hint">انقر على البطاقة لقلبها ومعرفة الإجابة 🔄</p>
+                <p class="fc-hint">${frontHintText}</p>
               </div>
 
               <div class="fc-face fc-back">
@@ -1619,8 +1741,7 @@
                   <span class="chip-b">الإجابة والملخص</span>
                 </div>
                 <div class="fc-body">
-                  <b class="fc-ans">✓ ${esc(ansText)}</b>
-                  ${q.explain ? `<p class="fc-exp">💡 ${esc(q.explain)}</p>` : ''}
+                  ${backBodyHtml}
                 </div>
                 <p class="fc-hint">قيّم نفسك للانتقال للبطاقة التالية 👇</p>
               </div>
@@ -1636,11 +1757,24 @@
       const flipper = ov.querySelector('#fc-flipper');
       const inner = ov.querySelector('#fc-card-inner');
       flipper.onclick = e => {
-        if (e.target.closest('#fc-tts')) return;
+        if (e.target.closest('#fc-tts') || e.target.closest('#fc-toggle-opts') || e.target.closest('#fc-opts-box')) return;
         isFlipped = !isFlipped;
         inner.classList.toggle('flipped', isFlipped);
         NQSound.playTock();
       };
+
+      const toggleOpts = ov.querySelector('#fc-toggle-opts');
+      if (toggleOpts) {
+        toggleOpts.onclick = e => {
+          e.stopPropagation();
+          const box = ov.querySelector('#fc-opts-box');
+          if (box) {
+            const isHidden = box.style.display === 'none';
+            box.style.display = isHidden ? 'flex' : 'none';
+            toggleOpts.textContent = isHidden ? '🙈 إخفاء الخيارات' : '💡 إظهار الخيارات للتلميح';
+          }
+        };
+      }
 
       const tts = ov.querySelector('#fc-tts');
       if (tts) tts.onclick = e => {
@@ -1671,64 +1805,68 @@
     if (!pool || !pool.length) return;
     const p = cur();
     const ov = document.createElement('div');
-    ov.className = 'overlay';
+    ov.className = 'overlay ws-print';
+    // الخيارات في بنك الأسئلة تبدأ بالإجابة الصحيحة، فنخلطها في الورقة (صح/خطأ يبقى بترتيبه)
+    const ordered = pool.map(q => ({ q, opts: q.options ? (q.tf ? q.options.slice() : shuffle(q.options)) : null }));
+    const today = new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+    // بعض الدروس اسمها المختصر جزء من اسمها الكامل («دالة القيمة المطلقة: 1-1 دالة القيمة المطلقة»)
+    const [t1, t2] = title.split(': ');
+    const wsTitle = t2 && t2.includes(t1) ? t2 : title;
+    const body = ({ q, opts }) => {
+      if ((q.type === 'mcq' || q.type === 'multi') && opts) {
+        const box = q.type === 'multi' ? '<span class="ws-opt-box"></span>' : '<span class="ws-opt-circ"></span>';
+        return `${q.type === 'multi' ? '<small class="ws-note">(اختر كل الإجابات الصحيحة)</small>' : ''}<div class="ws-opts">${opts.map(o => `<div class="ws-opt">${box}<span>${esc(o)}</span></div>`).join('')}</div>`;
+      }
+      if (q.type === 'fill') return '<div class="ws-line">الإجابة:</div>';
+      if (q.type === 'match') return `<table class="ws-match"><thead><tr><th>العنصر</th><th>التصنيف (${q.categories.map(esc).join(' / ')})</th></tr></thead><tbody>${shuffle(q.items).map(it => `<tr><td>${esc(it[0])}</td><td></td></tr>`).join('')}</tbody></table>`;
+      return '';
+    };
 
     ov.innerHTML = `
-      <div class="card ws-modal" role="dialog" aria-modal="true">
-        <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div class="card ws-modal" role="dialog" aria-modal="true" aria-label="ورقة عمل للطباعة">
+        <div class="no-print ws-bar">
           <b>معاينة ورقة العمل</b>
           <div>
-            <button type="button" class="btn" id="ws-do-print">🖨️ طباعة الآن</button>
+            <button type="button" class="btn" id="ws-do-print">🖨️ طباعة / حفظ PDF</button>
             <button type="button" class="btn ghost" id="ws-close">إغلاق</button>
           </div>
         </div>
         <div class="ws-paper">
           <div class="ws-head">
             <div>
-              <h2>دولة الكويت · وزارة التربية</h2>
-              <p>مادة: <b>${esc(s.name)}</b> · الصف: <b>${esc(s.grade)}</b></p>
+              <h2>ورقة تدريب: ${esc(wsTitle)}</h2>
+              <p>المادة: <b>${esc(s.name)}</b> · ${esc(s.grade)} · المنهج الكويتي</p>
             </div>
-            <div style="text-align:end">
-              <h2 style="color:var(--brand)">منصة قِمّة</h2>
-              <p>ورقة تدريب درس: <b>${esc(title)}</b></p>
-            </div>
+            <div class="ws-brand"><b>قِمّة</b><small>تعلَّم. أتقِن. تصدَّر.</small></div>
           </div>
           <div class="ws-meta">
-            <span>اسم الطالب: <b>${esc((p && !p.isGuest ? p.name : '') || '................................................')}</b></span>
-            <span>التاريخ: ____ / ____ / 2026 م</span>
+            <span>اسم الطالب: <b>${esc((p && !p.isGuest ? p.name : '') || '....................................')}</b></span>
+            <span>التاريخ: ${today}</span>
             <span>الدرجة: ______ / ${pool.length}</span>
           </div>
-
           <div class="ws-questions">
-            ${pool.map((q, idx) => `
+            ${ordered.map((x, idx) => `
               <div class="ws-q">
-                <span class="ws-q-num">(${idx + 1})</span> <b>${esc(q.q)}</b>
-                ${q.type === 'mcq' && q.options ? `
-                  <div class="ws-opts">
-                    ${q.options.map(opt => `<div class="ws-opt"><span class="ws-opt-circ"></span> <span>${esc(opt)}</span></div>`).join('')}
-                  </div>
-                ` : q.type === 'fill' ? `
-                  <div style="margin-top:10px;padding:8px 0;border-bottom:1px solid #999;width:60%">الإجابة: </div>
-                ` : q.type === 'multi' && q.options ? `
-                  <div class="ws-opts">
-                    ${q.options.map(opt => `<div class="ws-opt"><span style="width:14px;height:14px;border:1.5px solid #666;display:inline-block"></span> <span>${esc(opt)}</span></div>`).join('')}
-                  </div>
-                ` : ''}
-              </div>
-            `).join('')}
+                <div><span class="ws-q-num">(${idx + 1})</span> <b>${esc(x.q.q)}</b></div>
+                ${x.q.img ? `<img class="ws-img" src="${esc(x.q.img)}" alt="${esc(x.q.alt || '')}">` : ''}
+                ${body(x)}
+              </div>`).join('')}
           </div>
-
           <div class="ws-ans-key">
-            <h3 style="margin:0 0 8px">نموذج الإجابات الصحيحة (لولي الأمر والمعلم):</h3>
-            <ol style="margin:0;padding-inline-start:20px;display:grid;grid-template-columns:repeat(2,1fr);gap:4px">
-              ${pool.map((q, i) => `<li><b>س${i + 1}:</b> ${esc(correctText(q))}</li>`).join('')}
-            </ol>
+            <h3>نموذج الإجابات الصحيحة (لولي الأمر والمعلم)</h3>
+            <ol>${pool.map(q => `<li>${esc(correctText(q))}</li>`).join('')}</ol>
           </div>
         </div>
       </div>`;
 
-    ov.querySelector('#ws-close').onclick = () => ov.remove();
-    ov.querySelector('#ws-do-print').onclick = () => window.print();
+    const close = () => { ov.remove(); document.body.classList.remove('ws-printing'); };
+    ov.querySelector('#ws-close').onclick = close;
+    ov.onclick = e => { if (e.target === ov) close(); };
+    ov.querySelector('#ws-do-print').onclick = () => {
+      document.body.classList.add('ws-printing');
+      try { window.print(); } catch (e) { toast('الطباعة غير متاحة هنا'); }
+      setTimeout(() => document.body.classList.remove('ws-printing'), 800);
+    };
     document.body.appendChild(ov);
   }
 

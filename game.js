@@ -642,7 +642,9 @@
   async function downloadCert(sid, uid) {
     const NQ = N(), p = NQ.cur(), s = NQ.subjectById(sid), u = s && s.units.find(x => x.id === uid); if (!p || !u) return;
     const ui = unitInfo(p, s, u);
-    try { await document.fonts.load('700 60px Cairo'); await document.fonts.load('400 30px Cairo'); } catch (e) { }
+    // الشهادة لوحدة مكتملة بمتوسط 90٪ فأكثر فقط
+    if (!ui.done || ui.avg == null || ui.avg < 90) { NQ.toast('الشهادة تُمنح عند إتمام كل دروس الوحدة بمتوسط ٩٠٪ فأكثر'); return; }
+    try { await document.fonts.load('800 60px Cairo'); await document.fonts.load('500 30px Tajawal'); await document.fonts.load('700 30px Tajawal'); } catch (e) { }
     const W = 1600, H = 1130, c = document.createElement('canvas'); c.width = W; c.height = H;
     const x = c.getContext('2d'); x.direction = 'rtl'; x.textAlign = 'center';
     x.fillStyle = '#fffaf0'; x.fillRect(0, 0, W, H);
@@ -651,13 +653,13 @@
     const A = NQ.AVATARS[p.avatar];
     x.font = '120px serif'; x.fillText(A ? A[0] : '🏆', W / 2, 240);
     x.fillStyle = '#0f766e'; x.font = '800 88px Cairo, sans-serif'; x.fillText('شهادة تقدير', W / 2, 370);
-    x.fillStyle = '#334155'; x.font = '400 40px Cairo, sans-serif'; x.fillText('تُمنح هذه الشهادة للطالب/ة', W / 2, 460);
+    x.fillStyle = '#334155'; x.font = '500 40px Tajawal, sans-serif'; x.fillText('تُمنح هذه الشهادة للطالب/ة', W / 2, 460);
     x.fillStyle = '#b45309'; x.font = '800 78px Cairo, sans-serif'; x.fillText(p.name, W / 2, 570);
-    x.fillStyle = '#334155'; x.font = '400 40px Cairo, sans-serif';
+    x.fillStyle = '#334155'; x.font = '500 40px Tajawal, sans-serif';
     x.fillText(`لإتمامه ${u.name.split(':')[0]} في مادة ${s.name}`, W / 2, 670);
     x.fillText(`«${(u.name.split(':')[1] || '').trim()}»`, W / 2, 730);
-    x.fillStyle = '#15803d'; x.font = '800 52px Cairo, sans-serif'; x.fillText(`بمتوسط ${ui.avg}٪ — ممتاز`, W / 2, 830);
-    x.fillStyle = '#64748b'; x.font = '400 32px Cairo, sans-serif';
+    x.fillStyle = '#15803d'; x.font = '800 52px Cairo, sans-serif'; x.fillText(`بمتوسط ${num(ui.avg)}٪ — ممتاز`, W / 2, 830);
+    x.fillStyle = '#64748b'; x.font = '500 32px Tajawal, sans-serif';
     x.fillText(`${p.grade} · ${new Date().toLocaleDateString('ar-EG', { dateStyle: 'long' })} · قِمّة`, W / 2, 950);
     const blob = await new Promise(r => c.toBlob(r, 'image/png'));
     const filename = `شهادة-${p.name}-${s.name}-${uid}.png`.replace(/\s+/g, '-');

@@ -323,8 +323,8 @@
   }
 
   /* ================= 3) التقرير الأسبوعي ================= */
-  const REPORT_CSS = `.rp{font-family:'Cairo',system-ui,Tahoma,sans-serif;color:#1c2430;background:#fff;max-width:820px;margin:0 auto;padding:28px;border-radius:16px;line-height:1.7}
-.rp h1{margin:0;font-size:1.5rem}.rp h2{font-size:1.05rem;margin:22px 0 8px;padding-bottom:4px;border-bottom:2px solid #0f766e;color:#0f766e}
+  const REPORT_CSS = `.rp{font-family:'Tajawal',system-ui,Tahoma,sans-serif;font-weight:500;color:#1c2430;background:#fff;max-width:820px;margin:0 auto;padding:28px;border-radius:16px;line-height:1.7}
+.rp h1{margin:0;font-size:1.5rem;font-family:'Cairo',system-ui,sans-serif;font-weight:900}.rp h2{font-family:'Cairo',system-ui,sans-serif;font-weight:800;font-size:1.05rem;margin:22px 0 8px;padding-bottom:4px;border-bottom:2px solid #0f766e;color:#0f766e}
 .rp .rp-sub{color:#5f6b72;margin:2px 0 0}.rp .rp-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}
 .rp .rp-kpis div{border:1px solid #e1e4dc;border-radius:12px;padding:10px;text-align:center}.rp .rp-kpis b{display:block;font-size:1.35rem}.rp .rp-kpis small{color:#5f6b72}
 .rp table{width:100%;border-collapse:collapse;font-size:.92rem}.rp th,.rp td{text-align:right;padding:6px 8px;border-bottom:1px solid #e1e4dc}.rp th{background:#f3f4ef}
@@ -388,7 +388,7 @@
       setTimeout(() => document.body.classList.remove('px-printing'), 500);
     };
     document.getElementById('px-dl').onclick = async () => {
-      const data = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>التقرير الأسبوعي - ${esc(p.name)}</title><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#f3f4ef;padding:16px}${REPORT_CSS}</style></head><body>${reportInner(p)}</body></html>`;
+      const data = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>التقرير الأسبوعي - ${esc(p.name)}</title><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@700;800;900&family=Tajawal:wght@500;700&display=swap" rel="stylesheet"><style>body{margin:0;background:#f3f4ef;padding:16px}@media print{body{background:#fff;padding:0}@page{size:A4;margin:12mm}}${REPORT_CSS}</style></head><body>${reportInner(p)}</body></html>`;
       const filename = 'تقرير-' + String(p.name).trim().replace(/\s+/g, '-') + '-' + ymd() + '.html';
       let dl = null;
       if (window.claude && typeof window.claude.use === 'function') { try { dl = await window.claude.use('downloads'); } catch (e) { } }
