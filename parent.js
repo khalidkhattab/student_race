@@ -366,7 +366,7 @@
       ${weak.length ? `<table><thead><tr><th>الدرس</th><th>المادة</th><th>أفضل درجة</th></tr></thead><tbody>${weak.map(w => `<tr><td>${esc(w.name)}</td><td>${esc(w.s.name)}</td><td class="down">${num(w.pct)}٪</td></tr>`).join('')}</tbody></table>` : '<p>كل الدروس المحلولة درجتها 65٪ أو أكثر.</p>'}
       ${tasks.length ? `<h2>الواجبات</h2><table><thead><tr><th>الواجب</th><th>المادة</th><th>الحالة</th></tr></thead><tbody>${tasks.map(x => `<tr><td>${esc(x.t.title)}</td><td>${esc(x.s.name)}</td><td>${x.st.done ? (x.st.rec ? `<span class="up">تم · ${num(x.st.rec.pct)}٪</span>` : '<span class="up">تم</span>') : `<span class="${x.st.late ? 'down' : ''}">${dueTxt(x.t.due)}</span>`}</td></tr>`).join('')}</tbody></table>` : ''}
       ${tips.length ? `<h2>ملاحظات</h2>${tips.map(t => `<p class="note">${esc(t)}</p>`).join('')}` : ''}
-      <p class="rp-foot">منصة اختباراتي · ${dt(new Date())}</p>
+      <p class="rp-foot">قِمّة · ${dt(new Date())}</p>
     </div>`;
   }
   function renderReport(p, back) {
@@ -441,7 +441,7 @@
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
     s.onload = res; s.onerror = () => { qrLib = null; rej(new Error('qr')); }; document.head.appendChild(s);
   }));
-  const SHARE_TEXT = 'رابط ربط جهازك بحساب أسرتنا في منصة اختباراتي (لا ترسله لأحد خارج الأسرة):';
+  const SHARE_TEXT = 'رابط ربط جهازك بحساب أسرتنا في منصة قِمّة (لا ترسله لأحد خارج الأسرة):';
   async function copyText(t, ok) { try { await navigator.clipboard.writeText(t); N().toast(ok); } catch (e) { N().toast(t); } }
   // نافذة «ربط جهاز جديد»: سؤال واحد ثم الطريقة المناسبة (على الموبايل تظهر من أسفل الشاشة)
   function openLinkWindow() {
@@ -493,7 +493,7 @@
         </div><p class="muted" style="margin:0">افتح الرابط على الجهاز الآخر، ثم اضغط «نعم، اربط الجهاز».</p>`, true);
         bind();
         const sh = ov.querySelector('[data-share]');
-        if (sh) sh.onclick = async () => { try { await navigator.share({ title: 'منصة اختباراتي', text: SHARE_TEXT, url }); } catch (e) { } };
+        if (sh) sh.onclick = async () => { try { await navigator.share({ title: 'قِمّة', text: SHARE_TEXT, url }); } catch (e) { } };
         ov.querySelector('[data-copy]').onclick = () => copyText(url, 'تم نسخ رابط الربط ✓');
       }
     }

@@ -3,26 +3,31 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>منصة اختباراتي</title>
+  <title>قِمّة · اختبارات المنهج الكويتي</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@700;800;900&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=20261113a">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#0f766e">
   <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="اختباراتي">
+  <meta name="apple-mobile-web-app-title" content="قِمّة">
 </head>
 <body>
   <header class="topbar">
-    <a href="#home" class="brand"><span class="logo">📚</span><span>منصة اختباراتي</span></a>
+    <a href="#welcome" class="brand"><svg class="logo-svg" aria-hidden="true" width="42" height="30" viewBox="0 0 56 40"><path d="M2 38L20 10l8 11 6-8 20 25z" fill="#0f766e"/><path d="M20 10l5 7-5-1-4 5z" fill="#fff" opacity=".85"/><path d="M34 13V1" stroke="currentColor" stroke-width="1.6"/><path d="M34 1h9l-2.5 3 2.5 3h-9z" fill="#f2b705"/></svg><span class="bn">قِمّة</span></a>
     <nav>
       <a href="#home" data-nav="home">لوحتي</a>
       <a href="#arena" data-nav="arena">🏆 المنافسة</a>
       <a href="#records" data-nav="records">سجل الدرجات</a>
     </nav>
+    <div class="topbar-tools">
+      <button type="button" class="tb-btn" id="tb-pomo" title="مؤقت التركيز بومودورو" aria-label="مؤقت التركيز">⏱️</button>
+      <button type="button" class="tb-btn" id="tb-sound" title="المؤثرات الصوتية" aria-label="المؤثرات الصوتية">🔊</button>
+      <button type="button" class="tb-btn" id="tb-theme" title="الوضع الليلي" aria-label="الوضع الليلي">🌙</button>
+    </div>
   </header>
 
   <main id="app"></main>
@@ -30,8 +35,8 @@
   <footer class="foot">الدرجات تُحفظ تلقائياً · يمكنك تنزيل نسخة احتياطية من صفحة السجل</footer>
 
   <!--NQ_SERVER-->
-  <script src="firebase-config.js?v=20261111f"></script>
+  <script src="firebase-config.js?v=20261113a"></script>
   <!-- ملفات المواد تُحمّل حسب صف الطالب: انظر loader.js -->
-  <script src="loader.js?v=20261111f"></script>
+  <script src="loader.js?v=20261113a"></script>
 </body>
 </html>

@@ -658,7 +658,7 @@
     x.fillText(`«${(u.name.split(':')[1] || '').trim()}»`, W / 2, 730);
     x.fillStyle = '#15803d'; x.font = '800 52px Cairo, sans-serif'; x.fillText(`بمتوسط ${ui.avg}٪ — ممتاز`, W / 2, 830);
     x.fillStyle = '#64748b'; x.font = '400 32px Cairo, sans-serif';
-    x.fillText(`${p.grade} · ${new Date().toLocaleDateString('ar-EG', { dateStyle: 'long' })} · منصة اختباراتي`, W / 2, 950);
+    x.fillText(`${p.grade} · ${new Date().toLocaleDateString('ar-EG', { dateStyle: 'long' })} · قِمّة`, W / 2, 950);
     const blob = await new Promise(r => c.toBlob(r, 'image/png'));
     const filename = `شهادة-${p.name}-${s.name}-${uid}.png`.replace(/\s+/g, '-');
     let dl = null; if (window.claude && typeof window.claude.use === 'function') { try { dl = await window.claude.use('downloads'); } catch (e) { } }

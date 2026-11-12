@@ -229,7 +229,7 @@
     const invite = async sid => {
       const token = rid(24); await db.set('invites/' + token, { type: 'school', sid, at: Date.now() });
       const s = nameOf.get(sid) || { name: '' };
-      shareWindow({ title: 'رابط حساب المدرسة', url: siteUrl('staff-invite-' + token), text: `رابط تفعيل حساب «${s.name}» في منصة اختباراتي (لإدارة المدرسة فقط):`, note: '🔒 هذا الرابط يمنح صلاحية إدارة المدرسة، فأرسله لمسؤول المدرسة فقط.' });
+      shareWindow({ title: 'رابط حساب المدرسة', url: siteUrl('staff-invite-' + token), text: `رابط تفعيل حساب «${s.name}» في منصة قِمّة (لإدارة المدرسة فقط):`, note: '🔒 هذا الرابط يمنح صلاحية إدارة المدرسة، فأرسله لمسؤول المدرسة فقط.' });
     };
     app.querySelectorAll('[data-ok]').forEach(b => b.onclick = async () => {
       const r = reqs.find(x => x.id === b.dataset.ok); b.disabled = true;
@@ -302,7 +302,7 @@
     const inv = document.getElementById('st-inv');
     if (inv) inv.onclick = async () => {
       try { const token = rid(24); await db.set('invites/' + token, { type: 'teacher', sid: me.sid, at: Date.now() });
-        shareWindow({ title: 'دعوة المعلمين', url: siteUrl('staff-invite-' + token), text: `رابط انضمام معلمي «${school.name}» إلى منصة اختباراتي:`, note: 'يمكن لأكثر من معلم استخدام هذا الرابط. أرسله لمعلمي المدرسة فقط.' }); }
+        shareWindow({ title: 'دعوة المعلمين', url: siteUrl('staff-invite-' + token), text: `رابط انضمام معلمي «${school.name}» إلى منصة قِمّة:`, note: 'يمكن لأكثر من معلم استخدام هذا الرابط. أرسله لمعلمي المدرسة فقط.' }); }
       catch (e) { N().toast(errTxt(e)); }
     };
     app.querySelectorAll('[data-rm]').forEach(b => b.onclick = async () => { if (!(await N().ask('إزالة هذا المعلم من المدرسة؟', 'إزالة', true))) return; try { await db.del('staff/' + b.dataset.rm); renderStaff(); } catch (e) { N().toast(errTxt(e)); } });
@@ -365,7 +365,7 @@
       ${hard.length ? `<section class="card"><h2>أكثر الأسئلة خطأً في الفصل (آخر 30 يوماً)</h2><ul class="pg-list">${hard.map(([id, m]) => `<li><span class="dot" style="background:var(--bad)"></span><div><b>${esc(qmap[id].q.q)}</b><small>${qmap[id].s.icon} ${esc(qmap[id].s.name)} · الصحيح: ${esc(NQ.correctText(qmap[id].q))}</small></div><span class="pct" style="color:var(--bad)">${num(Math.round(m.w / m.n * 100))}٪ خطأ</span></li>`).join('')}</ul></section>` : ''}
       <section class="pr-danger"><span class="muted">حذف الفصل يزيل قائمة طلابه من المنصة (لا تتأثر درجاتهم عند أسرهم).</span><button type="button" class="btn danger small" id="cl-del">حذف الفصل</button></section>`,
       '<a class="btn ghost small" href="#staff">→ كل الفصول</a>');
-    document.getElementById('cl-inv').onclick = () => shareWindow({ title: 'دعوة أولياء الأمور', url: siteUrl('class-' + cid), text: `دعوة لانضمام أبنائكم إلى فصل ${c.grade} / ${c.section} – ${c.schoolName} في منصة اختباراتي. افتح الرابط وأدخل رقم ولي الأمر:`, note: 'ولي الأمر يقبل الدعوة لأبنائه من لوحته. يمكنك إغلاق الانضمام بعد اكتمال الفصل.' });
+    document.getElementById('cl-inv').onclick = () => shareWindow({ title: 'دعوة أولياء الأمور', url: siteUrl('class-' + cid), text: `دعوة لانضمام أبنائكم إلى فصل ${c.grade} / ${c.section} – ${c.schoolName} في منصة قِمّة. افتح الرابط وأدخل رقم ولي الأمر:`, note: 'ولي الأمر يقبل الدعوة لأبنائه من لوحته. يمكنك إغلاق الانضمام بعد اكتمال الفصل.' });
     document.getElementById('cl-subf').onsubmit = async e => {
       e.preventDefault(); const v = document.getElementById('cl-sub').value; if (!v) return N().toast('اختر المادة');
       try { await db.set('classes/' + cid, Object.assign({}, stripId(c), { subject: v })); N().toast('تم حفظ المادة ✓'); renderClass(cid); } catch (x) { N().toast(errTxt(x)); }

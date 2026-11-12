@@ -33,6 +33,140 @@
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
   };
   const newId = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+  /* ---------- المؤثرات الصوتية وقراءة الأسئلة (Web Audio & Speech) ---------- */
+  const NQSound = (function () {
+    let ctx = null;
+    let enabled = (() => {
+      try { return localStorage.getItem('nq_sound') !== '0'; } catch (e) { return true; }
+    })();
+
+    function getCtx() {
+      if (!ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) ctx = new AC();
+      }
+      if (ctx && ctx.state === 'suspended') ctx.resume();
+      return ctx;
+    }
+
+    function playTone(freq, type, duration, delay = 0, gainLevel = 0.15) {
+      if (!enabled) return;
+      try {
+        const c = getCtx();
+        if (!c) return;
+        const osc = c.createOscillator();
+        const gain = c.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, c.currentTime + delay);
+        gain.gain.setValueAtTime(gainLevel, c.currentTime + delay);
+        gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + delay + duration);
+        osc.connect(gain);
+        gain.connect(c.destination);
+        osc.start(c.currentTime + delay);
+        osc.stop(c.currentTime + delay + duration);
+      } catch (e) {}
+    }
+
+    return {
+      get enabled() { return enabled; },
+      set enabled(v) {
+        enabled = !!v;
+        try { localStorage.setItem('nq_sound', enabled ? '1' : '0'); } catch (e) {}
+      },
+      playCorrect() {
+        playTone(659.25, 'sine', 0.12, 0, 0.18);
+        playTone(880, 'sine', 0.22, 0.09, 0.22);
+      },
+      playWrong() {
+        playTone(220, 'triangle', 0.24, 0, 0.16);
+      },
+      playWin() {
+        playTone(523.25, 'triangle', 0.14, 0, 0.18);
+        playTone(659.25, 'triangle', 0.14, 0.11, 0.18);
+        playTone(783.99, 'triangle', 0.16, 0.22, 0.2);
+        playTone(1046.5, 'sine', 0.45, 0.35, 0.25);
+      },
+      playTock() {
+        playTone(750, 'sine', 0.04, 0, 0.08);
+      },
+      playChime() {
+        playTone(587.33, 'sine', 0.25, 0, 0.2);
+        playTone(880, 'sine', 0.45, 0.12, 0.22);
+      },
+      speak(text) {
+        if (!window.speechSynthesis) return;
+        try {
+          window.speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance(text);
+          u.lang = 'ar';
+          u.rate = 0.95;
+          window.speechSynthesis.speak(u);
+        } catch (e) {}
+      }
+    };
+  })();
+
+  /* ---------- الوضع الليلي (Dark Mode) ---------- */
+  const NQTheme = (function () {
+    let theme = (() => {
+      try {
+        const saved = localStorage.getItem('nq_theme');
+        if (saved) return saved;
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      } catch (e) { return 'light'; }
+    })();
+
+    function apply(t) {
+      theme = t;
+      document.documentElement.setAttribute('data-theme', theme);
+      try { localStorage.setItem('nq_theme', theme); } catch (e) {}
+      updateBtn();
+    }
+
+    function updateBtn() {
+      const b = document.getElementById('tb-theme');
+      if (b) {
+        b.textContent = theme === 'dark' ? '☀️' : '🌙';
+        b.title = theme === 'dark' ? 'الوضع النهاري' : 'الوضع الليلي';
+      }
+    }
+
+    apply(theme);
+    return {
+      get current() { return theme; },
+      toggle() { apply(theme === 'dark' ? 'light' : 'dark'); },
+      updateBtn
+    };
+  })();
+
+  function initTopbarTools() {
+    const pBtn = document.getElementById('tb-pomo');
+    if (pBtn) pBtn.onclick = () => openPomodoro();
+    const sBtn = document.getElementById('tb-sound');
+    const updateSoundBtn = () => {
+      if (sBtn) {
+        sBtn.textContent = NQSound.enabled ? '🔊' : '🔇';
+        sBtn.title = NQSound.enabled ? 'المؤثرات الصوتية مفعلة' : 'المؤثرات الصوتية مكتومة';
+      }
+    };
+    if (sBtn) {
+      updateSoundBtn();
+      sBtn.onclick = () => {
+        NQSound.enabled = !NQSound.enabled;
+        updateSoundBtn();
+        toast(NQSound.enabled ? 'تم تفعيل الصوت 🔊' : 'تم كتم الصوت 🔇');
+      };
+    }
+    const tBtn = document.getElementById('tb-theme');
+    if (tBtn) {
+      NQTheme.updateBtn();
+      tBtn.onclick = () => {
+        NQTheme.toggle();
+        toast(NQTheme.current === 'dark' ? 'الوضع الليلي 🌙' : 'الوضع النهاري ☀️');
+      };
+    }
+  }
   const normName = s => String(s || '').trim().replace(/\s+/g, ' ').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').toLowerCase();
   const gradeFromRecords = recs => { for (const r of recs || []) { const s = SUBJECTS.find(x => x.id === r.subjectId); if (s) return s.grade; } return null; };
   function mergeInto(t, src) {
@@ -373,6 +507,7 @@
     const questions = SUBJECTS.reduce((a, s) => a + allQuestions(s).length, 0);
     const tag = SUBJECTS.length === 1 ? `${SUBJECTS[0].name} · ${SUBJECTS[0].grade}` : GRADES.join(' · ');
     $app.innerHTML = window.WELCOME_HTML({ lessons, questions, tag: esc(tag) });
+    if (typeof window.WELCOME_INIT === 'function') window.WELCOME_INIT($app);
   }
 
   /* ---------- الصورة الرمزية والرقم السري ---------- */
@@ -412,6 +547,106 @@
   });
   let pinFails = 0, pinLockUntil = 0;
 
+  const pinBoxesHtml = (idPrefix, label) => `
+    <div class="pin-box-wrap" id="${idPrefix}-wrap">
+      ${label ? `<label class="pin-lbl">${label}</label>` : ''}
+      <div class="pin-boxes" dir="ltr">
+        <input type="password" inputmode="numeric" maxlength="1" class="pin-digit" id="${idPrefix}-0" data-idx="0" autocomplete="off" aria-label="الرقم الأول">
+        <input type="password" inputmode="numeric" maxlength="1" class="pin-digit" id="${idPrefix}-1" data-idx="1" autocomplete="off" aria-label="الرقم الثاني">
+        <input type="password" inputmode="numeric" maxlength="1" class="pin-digit" id="${idPrefix}-2" data-idx="2" autocomplete="off" aria-label="الرقم الثالث">
+        <input type="password" inputmode="numeric" maxlength="1" class="pin-digit" id="${idPrefix}-3" data-idx="3" autocomplete="off" aria-label="الرقم الرابع">
+      </div>
+      <input type="hidden" id="${idPrefix}" value="">
+    </div>`;
+
+  function bindPinBoxes(root, idPrefix, onComplete) {
+    const wrap = root.querySelector('#' + idPrefix + '-wrap');
+    if (!wrap) return null;
+    const inputs = [0, 1, 2, 3].map(i => wrap.querySelector('#' + idPrefix + '-' + i));
+    const hidden = wrap.querySelector('#' + idPrefix);
+    const getVal = () => inputs.map(el => el.value).join('');
+    const sync = () => {
+      const v = getVal();
+      if (hidden) hidden.value = v;
+      inputs.forEach(el => el.classList.toggle('filled', el.value !== ''));
+      return v;
+    };
+    inputs.forEach((inp, idx) => {
+      inp.addEventListener('input', () => {
+        let v = inp.value.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[^0-9]/g, '');
+        if (v.length > 1) v = v.slice(-1);
+        inp.value = v;
+        const total = sync();
+        if (v && idx < 3) { inputs[idx + 1].focus(); inputs[idx + 1].select(); }
+        if (total.length === 4 && onComplete) onComplete(total);
+      });
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Backspace') {
+          if (!inp.value && idx > 0) {
+            inputs[idx - 1].value = '';
+            inputs[idx - 1].focus();
+            sync();
+            e.preventDefault();
+          } else {
+            inp.value = '';
+            sync();
+          }
+        } else if (e.key === 'ArrowLeft' && idx > 0) {
+          inputs[idx - 1].focus();
+        } else if (e.key === 'ArrowRight' && idx < 3) {
+          inputs[idx + 1].focus();
+        }
+      });
+      inp.addEventListener('paste', e => {
+        e.preventDefault();
+        const text = (e.clipboardData || window.clipboardData).getData('text');
+        const digits = text.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[^0-9]/g, '').slice(0, 4);
+        digits.split('').forEach((d, i) => { if (inputs[i]) inputs[i].value = d; });
+        const total = sync();
+        const nextIdx = Math.min(digits.length, 3);
+        if (inputs[nextIdx]) inputs[nextIdx].focus();
+        if (total.length === 4 && onComplete) onComplete(total);
+      });
+    });
+    return {
+      get value() { return getVal(); },
+      clear() {
+        inputs.forEach(el => { el.value = ''; el.classList.remove('ok', 'filled'); });
+        sync();
+        if (inputs[0]) inputs[0].focus();
+      },
+      setOk() { inputs.forEach(el => el.classList.add('ok')); },
+      setDigit(d) {
+        const empty = inputs.find(el => !el.value);
+        if (empty) {
+          empty.value = d;
+          const idx = inputs.indexOf(empty);
+          if (idx < 3) inputs[idx + 1].focus();
+          const total = sync();
+          if (total.length === 4 && onComplete) onComplete(total);
+        }
+      },
+      backspace() {
+        for (let i = 3; i >= 0; i--) {
+          if (inputs[i].value) {
+            inputs[i].value = '';
+            inputs[i].focus();
+            sync();
+            break;
+          }
+        }
+      }
+    };
+  }
+
+  const numpadHtml = () => `
+    <div class="pin-numpad" dir="ltr" aria-label="لوحة الأرقام">
+      ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button type="button" class="num-key" data-k="${n}">${n}</button>`).join('')}
+      <button type="button" class="num-key fn" data-k="clear" aria-label="مسح الكل">مسح</button>
+      <button type="button" class="num-key" data-k="0">0</button>
+      <button type="button" class="num-key fn" data-k="back" aria-label="حذف">⌫</button>
+    </div>`;
+
   // نافذة إدخال الرقم السري ← true إذا كان صحيحاً
   function pinPrompt(p, title) {
     return new Promise(res => {
@@ -420,14 +655,44 @@
       ov.innerHTML = `<form class="card pin-card" role="dialog" aria-modal="true" aria-labelledby="pin-t" autocomplete="off">
         ${avatarHtml(p, true)}
         <h2 id="pin-t">${esc(title || 'أهلاً يا ' + p.name)}</h2>
-        ${pinInput('pin1', 'اكتب رقمك السري')}
+        ${pinBoxesHtml('pin1', 'اكتب رقمك السري (4 أرقام)')}
+        ${numpadHtml()}
         <p class="err" id="pin-err" role="alert"></p>
         <div class="actions"><button type="button" class="btn ghost" data-n>إلغاء</button><button type="submit" class="btn">دخول</button></div>
         <button type="button" class="linkish" data-forgot>نسيت رقمي السري</button>
       </form>`;
       const done = v => { ov.remove(); res(v); };
-      const f = ov.querySelector('form'), inp = ov.querySelector('#pin1'), err = ov.querySelector('#pin-err');
-      digitsOnly(inp);
+      const f = ov.querySelector('form'), err = ov.querySelector('#pin-err');
+      let checking = false;
+
+      const checkPin = async val => {
+        if (checking) return;
+        if (Date.now() < pinLockUntil) { err.textContent = `محاولات كثيرة. انتظر ${Math.ceil((pinLockUntil - Date.now()) / 1000)} ثانية.`; return; }
+        if (!validPin(val)) { err.textContent = 'الرقم السري 4 أرقام.'; return; }
+        checking = true;
+        if ((await hashPin(p.id, val)) === p.pinHash) {
+          pinFails = 0;
+          boxes.setOk();
+          setTimeout(() => done(true), 160);
+          return;
+        }
+        checking = false;
+        pinFails++;
+        boxes.clear();
+        f.classList.remove('shake'); void f.offsetWidth; f.classList.add('shake');
+        if (pinFails >= 5) { pinLockUntil = Date.now() + 30000; pinFails = 0; err.textContent = 'رقم خاطئ 5 مرات. انتظر 30 ثانية.'; }
+        else err.textContent = 'الرقم السري غير صحيح، حاول مرة أخرى.';
+      };
+
+      const boxes = bindPinBoxes(ov, 'pin1', checkPin);
+
+      ov.querySelectorAll('.num-key').forEach(b => b.onclick = () => {
+        const k = b.dataset.k;
+        if (k === 'clear') boxes.clear();
+        else if (k === 'back') boxes.backspace();
+        else boxes.setDigit(k);
+      });
+
       ov.querySelector('[data-n]').onclick = () => done(false);
       ov.onclick = e => { if (e.target === ov) done(false); };
       ov.querySelector('[data-forgot]').onclick = async () => {
@@ -437,19 +702,13 @@
         if (ok) { delete p.pinHash; persist(); renderSetup({ existing: p.id, name: p.name, grade: p.grade, avatar: p.avatar }); }
         res(false);
       };
-      f.onsubmit = async e => {
+      f.onsubmit = e => {
         e.preventDefault();
-        if (Date.now() < pinLockUntil) { err.textContent = `محاولات كثيرة. انتظر ${Math.ceil((pinLockUntil - Date.now()) / 1000)} ثانية.`; return; }
-        if (!validPin(inp.value)) { err.textContent = 'الرقم السري 4 أرقام.'; return; }
-        if ((await hashPin(p.id, inp.value)) === p.pinHash) { pinFails = 0; return done(true); }
-        pinFails++; inp.value = '';
-        f.classList.remove('shake'); void f.offsetWidth; f.classList.add('shake');
-        if (pinFails >= 5) { pinLockUntil = Date.now() + 30000; pinFails = 0; err.textContent = 'رقم خاطئ 5 مرات. انتظر 30 ثانية.'; }
-        else err.textContent = 'الرقم السري غير صحيح، حاول مرة أخرى.';
-        inp.focus();
+        checkPin(boxes.value);
       };
       document.body.appendChild(ov);
-      inp.focus();
+      const firstInp = ov.querySelector('#pin1-0');
+      if (firstInp) firstInp.focus();
     });
   }
 
@@ -461,8 +720,13 @@
     if (!a) return;
     const p = cur();
     const em = p && p.avatar != null ? AVATARS[p.avatar][0] : '👤';
-    a.textContent = p ? em + ' ' + p.name : '👤 تسجيل الدخول';
-    a.title = p ? 'تبديل الطالب' : 'تسجيل الدخول';
+    if (p && p.isGuest) {
+      a.textContent = '⭐ زائر';
+      a.title = 'حساب تجريبي (زائر) · اضغط للتسجيل أو التبديل';
+    } else {
+      a.textContent = p ? em + ' ' + p.name : '👤 تسجيل الدخول';
+      a.title = p ? 'تبديل الطالب' : 'تسجيل الدخول';
+    }
     a.setAttribute('aria-label', p ? `الطالب الحالي ${p.name}، اضغط للتبديل` : 'تسجيل الدخول');
   }
 
@@ -489,6 +753,32 @@
     if (await pinPrompt(p)) selectProfile(p);
   }
 
+  let loginNew = false, loginManage = false;
+  let wizStep = 1; // 1: الصف والاسم، 2: الصورة الرمزية، 3: الرقم السري
+  let wizData = { name: '', grade: null, avatar: null };
+
+  function loginAsGuest(grade) {
+    const g = grade || loginGrade || 'الصف الثامن';
+    const gid = 'guest';
+    store.profiles[gid] = {
+      id: gid,
+      name: 'زائر',
+      grade: g,
+      avatar: 23, // Star avatar ⭐
+      isGuest: true,
+      records: [],
+      wrong: {},
+      created: Date.now()
+    };
+    store.current = gid;
+    curGrade = g;
+    try { localStorage.setItem(KEY_GRADE, curGrade); } catch (e) { }
+    persist();
+    updateWho();
+    toast('أهلاً بك كزائر! يمكنك تصفح واختبار أي مادة 🌟');
+    go('#subjects');
+  }
+
   // إنشاء حساب جديد، أو إكمال حساب قديم ليس له رقم سري
   function renderSetup(d) {
     let av = d.avatar != null ? d.avatar : null;
@@ -498,18 +788,18 @@
         <p class="sub">${esc(d.grade)} — اختر صورتك ورقماً سرياً حتى لا يدخل أحد غيرك إلى درجاتك.</p>
         <form id="sf" autocomplete="off">
           <div class="card step">
-            <h2><span class="stepn">3</span> اختر صورتك</h2>
+            <h2><span class="stepn">1</span> اختر صورتك</h2>
             ${avatarGrid(av)}
           </div>
           <div class="card step">
-            <h2><span class="stepn">4</span> اختر رقمك السري (4 أرقام)</h2>
-            <div class="pin-row">
-              <div>${pinInput('sp1', 'الرقم السري')}</div>
-              <div>${pinInput('sp2', 'أعد كتابة الرقم')}</div>
+            <h2><span class="stepn">2</span> اختر رقمك السري (4 أرقام)</h2>
+            <div class="pin-row" style="justify-content:center">
+              <div>${pinBoxesHtml('sp1', 'الرقم السري')}</div>
+              <div>${pinBoxesHtml('sp2', 'تأكيد الرقم')}</div>
             </div>
-            <p class="hint">احفظه جيداً ولا تخبر به أحداً غير ولي أمرك.</p>
+            <p class="hint" style="text-align:center">احفظه جيداً ولا تخبر به أحداً غير ولي أمرك.</p>
             <p class="err" id="serr" role="alert"></p>
-            <div class="actions" style="justify-content:flex-start">
+            <div class="actions" style="justify-content:center;margin-top:14px">
               <button class="btn" type="submit">${d.existing ? 'حفظ والدخول' : 'إنشاء الحساب والدخول'} ←</button>
               <button class="btn ghost" type="button" id="sback">رجوع</button>
             </div>
@@ -517,25 +807,26 @@
         </form>
       </section>`;
     bindAvatarGrid($app, i => { av = i; });
-    const p1 = document.getElementById('sp1'), p2 = document.getElementById('sp2'), err = document.getElementById('serr');
-    digitsOnly(p1); digitsOnly(p2);
+    const b1 = bindPinBoxes($app, 'sp1');
+    const b2 = bindPinBoxes($app, 'sp2');
     document.getElementById('sback').onclick = () => renderLogin();
     document.getElementById('sf').onsubmit = async e => {
       e.preventDefault();
+      const err = document.getElementById('serr');
+      const v1 = b1.value, v2 = b2.value;
       if (av == null) { err.textContent = 'اختر صورة رمزية.'; return; }
-      if (!validPin(p1.value)) { err.textContent = 'الرقم السري يجب أن يكون 4 أرقام.'; p1.focus(); return; }
-      if (p1.value !== p2.value) { err.textContent = 'الرقمان غير متطابقين.'; p2.value = ''; p2.focus(); return; }
-      if (weakPin(p1.value)) { err.textContent = 'هذا الرقم سهل التخمين، اختر رقماً آخر.'; return; }
+      if (!validPin(v1)) { err.textContent = 'الرقم السري يجب أن يكون 4 أرقام.'; return; }
+      if (v1 !== v2) { err.textContent = 'الرقمان غير متطابقين.'; b2.clear(); return; }
+      if (weakPin(v1)) { err.textContent = 'هذا الرقم سهل التخمين، اختر رقماً آخر.'; return; }
       let p = d.existing ? store.profiles[d.existing] : null;
       if (!p) { p = { id: newId(), name: d.name, grade: d.grade, records: [], wrong: {}, created: Date.now() }; store.profiles[p.id] = p; }
       p.avatar = av;
-      p.pinHash = await hashPin(p.id, p1.value);
+      p.pinHash = await hashPin(p.id, v1);
       selectProfile(p);
     };
   }
 
   // شاشة الدخول: صور طلاب الجهاز أولاً، ومربع «طالب جديد» يفتح خطوة الصف والاسم
-  let loginNew = false, loginManage = false;
   const TILE_COLORS = ['#0f766e', '#c2620a', '#2563eb', '#7c3aed', '#be185d', '#15803d', '#b45309', '#0369a1'];
   const lockIcon = '<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>';
   function tileFace(p, i) {
@@ -543,59 +834,152 @@
     return a ? `<span class="lg-face" style="background:${a[1]}" aria-hidden="true">${a[0]}</span>`
       : `<span class="lg-face" style="background:${TILE_COLORS[i % TILE_COLORS.length]}" aria-hidden="true">${esc((p.name || '؟').trim().charAt(0))}</span>`;
   }
+
   function renderLogin() {
-    const people = Object.values(store.profiles).filter(p => GRADES.includes(p.grade))
+    const people = Object.values(store.profiles).filter(p => !p.isGuest && GRADES.includes(p.grade))
       .sort((a, b) => (b.records.length ? b.records[b.records.length - 1].date : b.created) - (a.records.length ? a.records[a.records.length - 1].date : a.created));
-    const noGrade = Object.values(store.profiles).filter(p => !GRADES.includes(p.grade));
+    const noGrade = Object.values(store.profiles).filter(p => !p.isGuest && !GRADES.includes(p.grade));
     const showNew = loginNew || !people.length;
-    if (!loginGrade) loginGrade = cur() ? cur().grade : (people[0] ? people[0].grade : null);
+    if (!loginGrade) loginGrade = cur() && !cur().isGuest ? cur().grade : (people[0] ? people[0].grade : GRADES[0]);
+    if (!wizData.grade) wizData.grade = loginGrade;
     const fam = window.NQFamily && window.NQFamily.enabled(), staff = window.NQSchools && window.NQSchools.enabled();
+    const g = gx();
+
     $app.innerHTML = `
       <section class="lg-page">
-        <nav class="lg-others" aria-label="حسابات أخرى">
-          <a href="#parent" class="lg-other parent">ولي الأمر</a>
-          ${staff ? '<a href="#staff" class="lg-other">المعلمون والمدارس</a>' : ''}
-        </nav>
-        <h1 class="lg-title">${people.length ? 'من سيذاكر الآن؟' : 'أهلاً بك! لنبدأ'}</h1>
+        <h1 class="lg-title">${people.length ? 'من سيذاكر الآن؟' : 'أهلاً بك في قِمّة! لنبدأ'}</h1>
         ${people.length ? `<div class="lg-tiles${loginManage ? ' manage' : ''}">
-          ${people.map((p, i) => `<div class="lg-tile-wrap">
-            <button type="button" class="lg-tile${cur() && cur().id === p.id ? ' on' : ''}" data-pick="${p.id}">${tileFace(p, i)}<b>${esc(p.name)}</b><small>${esc(p.grade)}${p.pinHash ? ' · ' + lockIcon : ''}</small></button>
-            ${loginManage ? `<button type="button" class="lg-del" data-del="${p.id}" aria-label="حذف ${esc(p.name)} من هذا الجهاز">حذف</button>` : ''}
-          </div>`).join('')}
-          ${loginManage ? '' : `<button type="button" class="lg-tile lg-new${showNew ? ' on' : ''}" id="lg-new" aria-expanded="${showNew}"><span class="lg-face add" aria-hidden="true"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span><b>طالب جديد</b><small>اسم + صف</small></button>`}
+          ${people.map((p, i) => {
+            const xp = g ? g._totalXp(p) : 0, L = g ? g._levelOf(xp) : null;
+            const isRecent = i === 0 && people.length > 1;
+            const a = p.avatar != null ? AVATARS[p.avatar] : null;
+            return `<div class="lg-tile-wrap">
+              <button type="button" class="lg-tile${cur() && cur().id === p.id ? ' on' : ''}" data-pick="${p.id}" style="${a ? `--av-glow:${a[1]}44` : ''}">
+                ${isRecent ? '<span class="lg-badge-recent">آخر نشاط</span>' : ''}
+                ${tileFace(p, i)}
+                <b>${esc(p.name)}</b>
+                <small>${esc(p.grade)}${p.pinHash ? ' · ' + lockIcon : ''}</small>
+                <span class="lg-stat">${L ? `${L.icon} ${esc(L.name)}` : `${nf(p.records.length)} اختبار`}</span>
+              </button>
+              ${loginManage ? `<button type="button" class="lg-del" data-del="${p.id}" aria-label="حذف ${esc(p.name)} من هذا الجهاز">حذف</button>` : ''}
+            </div>`;
+          }).join('')}
+          ${loginManage ? '' : `<button type="button" class="lg-tile lg-new${showNew ? ' on' : ''}" id="lg-new" aria-expanded="${showNew}"><span class="lg-face add" aria-hidden="true"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span><b>طالب جديد</b><small>خطوات سهلة</small></button>`}
         </div>` : ''}
+
         ${showNew && !loginManage ? `<div class="card lg-newcard">
-          <h2>${people.length ? 'طالب جديد' : 'اختر صفك واكتب اسمك'}</h2>
-          <div class="grade-tabs" role="radiogroup" aria-label="الصف الدراسي">
-            ${GRADES.map(g => `<button type="button" role="radio" class="grade-tab${g === loginGrade ? ' on' : ''}" aria-checked="${g === loginGrade}" data-lg="${esc(g)}">${esc(g)}</button>`).join('')}
+          <div class="wiz-stepper">
+            <span class="wiz-step ${wizStep === 1 ? 'on' : 'done'}">${wizStep > 1 ? '✓' : '①'} الصف والاسم</span>
+            <span class="wiz-step ${wizStep === 2 ? 'on' : wizStep > 2 ? 'done' : ''}">${wizStep > 2 ? '✓' : '②'} صورتك الرمزية</span>
+            <span class="wiz-step ${wizStep === 3 ? 'on' : ''}">③ رقمك السري</span>
           </div>
-          <form id="lf" class="name-row" autocomplete="off">
-            <label for="nm" class="sr">اسم الطالب</label>
-            <input id="nm" placeholder="${loginGrade ? 'اكتب اسمك هنا' : 'اختر صفك أولاً'}" maxlength="30" required ${loginGrade ? '' : 'disabled'}>
-            <button class="btn" type="submit" ${loginGrade ? '' : 'disabled'}>التالي ←</button>
-          </form>
-          <p class="err" id="lerr" role="alert"></p>
+
+          ${wizStep === 1 ? `
+            <h2>${people.length ? 'طالب جديد' : 'اختر صفك واكتب اسمك'}</h2>
+            <div class="grade-tabs" role="radiogroup" aria-label="الصف الدراسي">
+              ${GRADES.map(gr => `<button type="button" role="radio" class="grade-tab${gr === loginGrade ? ' on' : ''}" aria-checked="${gr === loginGrade}" data-lg="${esc(gr)}">${esc(gr)}</button>`).join('')}
+            </div>
+            <form id="lf" class="name-row" autocomplete="off">
+              <label for="nm" class="sr">اسم الطالب</label>
+              <input id="nm" value="${esc(wizData.name || '')}" placeholder="${loginGrade ? 'اكتب اسمك هنا' : 'اختر صفك أولاً'}" maxlength="30" required ${loginGrade ? '' : 'disabled'}>
+              <button class="btn" type="submit" ${loginGrade ? '' : 'disabled'}>متابعة: صورتك ←</button>
+            </form>
+            <p class="err" id="lerr" role="alert"></p>
+            <div class="lg-guest-wrap">
+              <button type="button" class="lg-guest-btn" id="lg-guest">🚀 تجربة المنصة كزائر (بدون تسجيل)</button>
+            </div>
+          ` : ''}
+
+          ${wizStep === 2 ? `
+            <div class="wiz-preview">
+              <span>الصف: <b>${esc(wizData.grade)}</b></span>
+              <span>الطالب: <b>${esc(wizData.name)}</b></span>
+            </div>
+            <h2>اختر صورتك الرمزية</h2>
+            ${avatarGrid(wizData.avatar)}
+            <div class="actions" style="margin-top:14px;justify-content:space-between">
+              <button type="button" class="btn ghost" id="wiz-b1">← رجوع</button>
+              <button type="button" class="btn" id="wiz-n2" ${wizData.avatar != null ? '' : 'disabled'}>متابعة: الرقم السري ←</button>
+            </div>
+          ` : ''}
+
+          ${wizStep === 3 ? `
+            <div class="wiz-preview">
+              ${wizData.avatar != null ? avatarHtml({ avatar: wizData.avatar, name: wizData.name }) : ''}
+              <div><b>${esc(wizData.name)}</b><small class="muted" style="display:block">${esc(wizData.grade)}</small></div>
+            </div>
+            <h2>اختر رقمك السري (4 أرقام)</h2>
+            <p class="hint">لحماية درجاتك ومستواك على هذا الجهاز حتى لا يدخل أحد غيرك.</p>
+            <form id="wiz-f3" autocomplete="off">
+              <div class="pin-row" style="justify-content:center">
+                <div>${pinBoxesHtml('wz-p1', 'الرقم السري')}</div>
+                <div>${pinBoxesHtml('wz-p2', 'تأكيد الرقم')}</div>
+              </div>
+              <p class="err" id="wiz-err" role="alert"></p>
+              <div class="actions" style="margin-top:14px;justify-content:space-between">
+                <button type="button" class="btn ghost" id="wiz-b2">← رجوع</button>
+                <button type="submit" class="btn">إنشاء الحساب والبدء 🚀</button>
+              </div>
+            </form>
+          ` : ''}
         </div>` : ''}
+
         ${noGrade.length ? `<div class="card lg-newcard">
           <h2>سجلات قديمة بدون صف</h2>
           <p class="hint">افتح «طالب جديد» واختر الصف، ثم اضغط على الاسم لنقله إلى ${loginGrade ? esc(loginGrade) : 'الصف المختار'}:</p>
           <div class="people">${noGrade.map(p => `<div class="person"><button type="button" class="pick" data-move="${p.id}" ${loginGrade ? '' : 'disabled'}>${avatarHtml(p)}<span><b>${esc(p.name)}</b><small>${p.records.length} اختبار</small></span></button></div>`).join('')}</div>
         </div>` : ''}
+
+        <div class="lg-gateways">
+          <div class="lg-gw-card parent">
+            <div class="lg-gw-ic">👨‍👩‍👧</div>
+            <div>
+              <b>بوابة ولي الأمر</b>
+              <small>متابعة مستوى الأبناء وتقارير الإنجاز</small>
+            </div>
+            <a href="#parent" class="btn sm ghost">دخول ولي الأمر ←</a>
+          </div>
+          ${staff ? `
+          <div class="lg-gw-card staff">
+            <div class="lg-gw-ic">🏫</div>
+            <div>
+              <b>بوابة المعلمين والمدارس</b>
+              <small>إدارة الفصول والأسئلة الشائعة</small>
+            </div>
+            <a href="#staff" class="btn sm ghost">دخول المعلم ←</a>
+          </div>` : ''}
+        </div>
+
         <p class="lg-foot">لكل طالب صورته ورقمه السري${fam ? ' · <button type="button" class="linkish" id="fam-join">ربط هذا الجهاز بحساب الأسرة</button>' : ''}${people.length ? ` · <button type="button" class="linkish" id="lg-manage">${loginManage ? 'تم' : 'إدارة الطلاب'}</button>` : ''}</p>
       </section>`;
 
     const nb = document.getElementById('lg-new');
-    if (nb) nb.onclick = () => { loginNew = !loginNew; renderLogin(); const i = document.getElementById('nm'); if (i && loginNew) i.focus(); };
-    const mg = document.getElementById('lg-manage'); if (mg) mg.onclick = () => { loginManage = !loginManage; loginNew = false; renderLogin(); };
+    if (nb) nb.onclick = () => {
+      loginNew = !loginNew;
+      wizStep = 1;
+      renderLogin();
+      const i = document.getElementById('nm');
+      if (i && loginNew) i.focus();
+    };
+
+    const mg = document.getElementById('lg-manage');
+    if (mg) mg.onclick = () => { loginManage = !loginManage; loginNew = false; renderLogin(); };
+
     $app.querySelectorAll('[data-lg]').forEach(b => b.onclick = () => {
-      loginGrade = b.dataset.lg; loginNew = true; renderLogin();
-      const i = document.getElementById('nm'); if (i) i.focus();
+      loginGrade = b.dataset.lg;
+      wizData.grade = loginGrade;
+      loginNew = true;
+      renderLogin();
+      const i = document.getElementById('nm');
+      if (i) i.focus();
     });
+
     $app.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => enterProfile(store.profiles[b.dataset.pick]));
     const fj = document.getElementById('fam-join'); if (fj) fj.onclick = () => familyJoinDialog();
     $app.querySelectorAll('[data-move]').forEach(b => b.onclick = () => {
       const p = store.profiles[b.dataset.move]; p.grade = loginGrade; persist(); enterProfile(p);
     });
+
     $app.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
       const p = store.profiles[b.dataset.del];
       if (p.pinHash && !(await pinPrompt(p, 'لحذف "' + p.name + '" اكتب رقمه السري'))) return;
@@ -605,16 +989,59 @@
       if (!Object.keys(store.profiles).length) loginManage = false;
       persist(); updateWho(); renderLogin(); toast('تم حذف الطالب');
     });
-    const f = document.getElementById('lf');
-    if (f) f.onsubmit = e => {
+
+    // أحداث معالج إنشاء طالب جديد
+    const guestBtn = document.getElementById('lg-guest');
+    if (guestBtn) guestBtn.onclick = () => loginAsGuest(loginGrade);
+
+    const f1 = document.getElementById('lf');
+    if (f1) f1.onsubmit = e => {
       e.preventDefault();
       const name = document.getElementById('nm').value.trim().replace(/\s+/g, ' ');
       const err = document.getElementById('lerr');
       if (name.length < 2) { err.textContent = 'اكتب اسمك (حرفين على الأقل).'; return; }
       const p = findProfile(name, loginGrade);
       if (p) return enterProfile(p);
-      renderSetup({ name, grade: loginGrade });
+      wizData.name = name;
+      wizData.grade = loginGrade;
+      wizStep = 2;
+      renderLogin();
     };
+
+    if (wizStep === 2) {
+      bindAvatarGrid($app, i => {
+        wizData.avatar = i;
+        const n2 = document.getElementById('wiz-n2');
+        if (n2) n2.disabled = false;
+      });
+      const b1 = document.getElementById('wiz-b1');
+      if (b1) b1.onclick = () => { wizStep = 1; renderLogin(); };
+      const n2 = document.getElementById('wiz-n2');
+      if (n2) n2.onclick = () => {
+        if (wizData.avatar != null) { wizStep = 3; renderLogin(); }
+      };
+    }
+
+    if (wizStep === 3) {
+      const wb1 = bindPinBoxes($app, 'wz-p1');
+      const wb2 = bindPinBoxes($app, 'wz-p2');
+      const b2 = document.getElementById('wiz-b2');
+      if (b2) b2.onclick = () => { wizStep = 2; renderLogin(); };
+      const f3 = document.getElementById('wiz-f3');
+      if (f3) f3.onsubmit = async e => {
+        e.preventDefault();
+        const err = document.getElementById('wiz-err');
+        const v1 = wb1.value, v2 = wb2.value;
+        if (!validPin(v1)) { err.textContent = 'الرقم السري يجب أن يكون 4 أرقام.'; return; }
+        if (v1 !== v2) { err.textContent = 'الرقمان غير متطابقين.'; wb2.clear(); return; }
+        if (weakPin(v1)) { err.textContent = 'هذا الرقم سهل التخمين، اختر رقماً آخر.'; return; }
+        const p = { id: newId(), name: wizData.name, grade: wizData.grade, avatar: wizData.avatar, records: [], wrong: {}, created: Date.now() };
+        p.pinHash = await hashPin(p.id, v1);
+        store.profiles[p.id] = p;
+        wizStep = 1; wizData = { name: '', grade: null, avatar: null }; loginNew = false;
+        selectProfile(p);
+      };
+    }
   }
 
   /* ---------- تعديل ملفي: الصورة والرقم السري ---------- */
@@ -710,6 +1137,7 @@
           ${link('home', '#home', 'الرئيسية')}${link('subjects', '#subjects', 'موادي')}${link('progress', '#progress', 'تقدّمي')}${link('achievements', '#achievements', 'إنجازاتي')}
           <span class="sb-sep" aria-hidden="true"></span>
           ${link('arena', '#arena', 'المنافسة')}
+          <button type="button" class="sb-a" id="sb-pomo"><span class="sb-ic" style="display:inline-grid;place-items:center;font-size:1.1rem">⏱️</span><span>مؤقت التركيز</span></button>
           <button type="button" class="sb-a" id="sb-edit">${icon('edit')}<span>ملفي</span></button>
           <button type="button" class="sb-a" id="sb-out">${icon('out')}<span>تسجيل الخروج</span></button>
         </div>
@@ -717,6 +1145,7 @@
       <div class="shell-main" id="pg"></div>
     </div>`;
     document.getElementById('pg').appendChild(frag);
+    const sbp = document.getElementById('sb-pomo'); if (sbp) sbp.onclick = () => openPomodoro();
     document.getElementById('sb-edit').onclick = () => editProfile();
     document.getElementById('sb-out').onclick = () => logout();
   }
@@ -1006,6 +1435,303 @@
     });
   }
 
+  /* ---------- مؤقت التركيز (Pomodoro) ---------- */
+  let pomoTimer = null;
+  let pomoSecsLeft = 25 * 60;
+  let pomoTotalSecs = 25 * 60;
+  let pomoRunning = false;
+  let pomoMode = 'work'; // 'work' | 'break'
+
+  function openPomodoro() {
+    if (document.querySelector('.pomo-modal')) return;
+    const ov = document.createElement('div');
+    ov.className = 'overlay pomo-modal';
+
+    const renderPomo = () => {
+      const mins = Math.floor(pomoSecsLeft / 60);
+      const secs = pomoSecsLeft % 60;
+      const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      const pct = Math.round((pomoSecsLeft / pomoTotalSecs) * 100);
+
+      ov.innerHTML = `
+        <div class="card pomo-card" role="dialog" aria-modal="true">
+          <div style="display:flex;justify-content:space-between;width:100%;align-items:center">
+            <h2 style="margin:0;font-size:1.2rem">⏱️ مؤقت التركيز للمذاكرة</h2>
+            <button type="button" class="btn ghost small" id="pomo-close" aria-label="إغلاق">✕</button>
+          </div>
+
+          <div class="pomo-modes">
+            <button type="button" class="pomo-mode ${pomoMode === 'work' ? 'on' : ''}" data-pm="work">🎯 تركيز (25 د)</button>
+            <button type="button" class="pomo-mode ${pomoMode === 'break' ? 'on' : ''}" data-pm="break">☕ استراحة (5 د)</button>
+          </div>
+
+          <div class="pomo-ring" style="--p:${pct};--brand:${pomoMode === 'work' ? 'var(--brand)' : 'var(--ok)'}">
+            <div class="pomo-inner">
+              <div class="pomo-time">${timeStr}</div>
+              <span class="pomo-label">${pomoMode === 'work' ? 'جلسة مذاكرة' : 'استراحة قصيرة'}</span>
+            </div>
+          </div>
+
+          <div class="pomo-btns">
+            <button type="button" class="btn ${pomoRunning ? 'warn' : ''}" id="pomo-toggle">${pomoRunning ? '⏸️ إيقاف مؤقت' : '▶️ ابدأ الجلسة'}</button>
+            <button type="button" class="btn ghost" id="pomo-reset">🔄 إعادة ضبط</button>
+          </div>
+
+          <small class="muted">${pomoMode === 'work' ? '🔥 أكمل جلسة التركيز واحصل على +15 نقطة خبرة' : 'استرخِ واستعد للجلسة القادمة'}</small>
+        </div>`;
+
+      ov.querySelector('#pomo-close').onclick = () => ov.remove();
+      ov.onclick = e => { if (e.target === ov) ov.remove(); };
+
+      ov.querySelectorAll('[data-pm]').forEach(b => b.onclick = () => {
+        pomoMode = b.dataset.pm;
+        pomoTotalSecs = (pomoMode === 'work' ? 25 : 5) * 60;
+        pomoSecsLeft = pomoTotalSecs;
+        pomoRunning = false;
+        clearInterval(pomoTimer);
+        renderPomo();
+      });
+
+      ov.querySelector('#pomo-toggle').onclick = () => {
+        if (pomoRunning) {
+          pomoRunning = false;
+          clearInterval(pomoTimer);
+          renderPomo();
+        } else {
+          pomoRunning = true;
+          NQSound.playTock();
+          renderPomo();
+          clearInterval(pomoTimer);
+          pomoTimer = setInterval(() => {
+            if (pomoSecsLeft > 0) {
+              pomoSecsLeft--;
+              const m = Math.floor(pomoSecsLeft / 60);
+              const s = pomoSecsLeft % 60;
+              const tStr = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+              const tEl = ov.querySelector('.pomo-time');
+              if (tEl) tEl.textContent = tStr;
+              const rEl = ov.querySelector('.pomo-ring');
+              if (rEl) rEl.style.setProperty('--p', Math.round((pomoSecsLeft / pomoTotalSecs) * 100));
+            } else {
+              clearInterval(pomoTimer);
+              pomoRunning = false;
+              NQSound.playChime();
+              if (pomoMode === 'work' && window.NQGame && cur()) {
+                window.NQGame._addXp(cur(), 15, 'pomodoro');
+                persist();
+                toast('🎉 رائع! أنهيت جلسة تركيز كاملة (+15 نقطة XP)');
+              } else {
+                toast('☕ انتهى وقت الاستراحة! هل أنت مستعد للتركيز؟');
+              }
+              pomoMode = pomoMode === 'work' ? 'break' : 'work';
+              pomoTotalSecs = (pomoMode === 'work' ? 25 : 5) * 60;
+              pomoSecsLeft = pomoTotalSecs;
+              renderPomo();
+            }
+          }, 1000);
+        }
+      };
+
+      ov.querySelector('#pomo-reset').onclick = () => {
+        clearInterval(pomoTimer);
+        pomoRunning = false;
+        pomoSecsLeft = pomoTotalSecs;
+        renderPomo();
+      };
+    };
+
+    renderPomo();
+    document.body.appendChild(ov);
+  }
+
+  /* ---------- وضع بطاقات الحفظ والتلخيص (Flashcards) ---------- */
+  function startFlashcards(s, title, pool) {
+    if (!pool || !pool.length) return;
+    let deck = shuffle(pool).slice();
+    let currentIdx = 0;
+    let isFlipped = false;
+
+    const ov = document.createElement('div');
+    ov.className = 'overlay';
+
+    const drawCard = () => {
+      if (currentIdx >= deck.length) {
+        NQSound.playWin();
+        if (window.NQGame && cur()) {
+          window.NQGame._addXp(cur(), 10, 'flashcards');
+          persist();
+        }
+        ov.innerHTML = `
+          <div class="card" role="dialog" aria-modal="true" style="max-width:440px;text-align:center;padding:32px 24px">
+            <div style="font-size:3.5rem;margin-bottom:8px">🎉</div>
+            <h2 style="font-size:1.6rem;margin:0 0 6px">أحسنت صنعاً!</h2>
+            <p class="sub" style="margin:0 0 16px">أتممت مراجعة كل بطاقات «${esc(title)}» بنجاح!</p>
+            <div class="chip-b" style="margin:0 auto 20px;font-size:1rem;padding:6px 16px">+10 نقاط خبرة XP 🌟</div>
+            <div class="actions" style="justify-content:center;gap:10px">
+              <button type="button" class="btn" id="fc-restart">🔁 مراجعة مرة أخرى</button>
+              <button type="button" class="btn ghost" id="fc-close">إغلاق</button>
+            </div>
+          </div>`;
+        ov.querySelector('#fc-restart').onclick = () => {
+          deck = shuffle(pool).slice();
+          currentIdx = 0;
+          isFlipped = false;
+          drawCard();
+        };
+        ov.querySelector('#fc-close').onclick = () => ov.remove();
+        return;
+      }
+
+      const q = deck[currentIdx];
+      isFlipped = false;
+      const ansText = correctText(q);
+      const progPct = Math.round((currentIdx / deck.length) * 100);
+
+      ov.innerHTML = `
+        <div class="card" role="dialog" aria-modal="true" style="max-width:560px;width:100%;padding:22px">
+          <div class="fc-head">
+            <div>
+              <span class="kind">بطاقة ${currentIdx + 1} من ${deck.length}</span>
+              <small class="muted" style="margin-inline-start:8px">${esc(s.name)} · ${esc(title)}</small>
+            </div>
+            <button type="button" class="btn ghost small" id="fc-exit" aria-label="خروج">✕</button>
+          </div>
+          <div class="bar" style="margin:12px 0 16px"><i style="width:${progPct}%"></i></div>
+
+          <div class="fc-card-container" id="fc-flipper">
+            <div class="fc-card" id="fc-card-inner">
+              <div class="fc-face fc-front">
+                <div class="fc-head">
+                  <span class="chip-a">${esc(q.kind || 'مفهوم')}</span>
+                  <button type="button" class="btn-tts" id="fc-tts" title="استمع للسؤال">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                  </button>
+                </div>
+                <div class="fc-body">
+                  <p class="fc-qtext">${esc(q.q)}</p>
+                  ${qImg(q, true)}
+                </div>
+                <p class="fc-hint">انقر على البطاقة لقلبها ومعرفة الإجابة 🔄</p>
+              </div>
+
+              <div class="fc-face fc-back">
+                <div class="fc-head">
+                  <span class="chip-b">الإجابة والملخص</span>
+                </div>
+                <div class="fc-body">
+                  <b class="fc-ans">✓ ${esc(ansText)}</b>
+                  ${q.explain ? `<p class="fc-exp">💡 ${esc(q.explain)}</p>` : ''}
+                </div>
+                <p class="fc-hint">قيّم نفسك للانتقال للبطاقة التالية 👇</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="fc-btns">
+            <button type="button" class="fc-btn review" id="fc-act-rev">🔁 أحتاج مراجعة</button>
+            <button type="button" class="fc-btn master" id="fc-act-ok">✅ أتقنتها</button>
+          </div>
+        </div>`;
+
+      const flipper = ov.querySelector('#fc-flipper');
+      const inner = ov.querySelector('#fc-card-inner');
+      flipper.onclick = e => {
+        if (e.target.closest('#fc-tts')) return;
+        isFlipped = !isFlipped;
+        inner.classList.toggle('flipped', isFlipped);
+        NQSound.playTock();
+      };
+
+      const tts = ov.querySelector('#fc-tts');
+      if (tts) tts.onclick = e => {
+        e.stopPropagation();
+        NQSound.speak(q.q);
+      };
+
+      ov.querySelector('#fc-exit').onclick = () => ov.remove();
+      ov.querySelector('#fc-act-ok').onclick = () => {
+        NQSound.playCorrect();
+        currentIdx++;
+        drawCard();
+      };
+      ov.querySelector('#fc-act-rev').onclick = () => {
+        NQSound.playTock();
+        const curr = deck.splice(currentIdx, 1)[0];
+        deck.push(curr);
+        drawCard();
+      };
+    };
+
+    drawCard();
+    document.body.appendChild(ov);
+  }
+
+  /* ---------- طباعة ورقة العمل (Worksheet) ---------- */
+  function renderPrintWorksheet(s, title, pool) {
+    if (!pool || !pool.length) return;
+    const p = cur();
+    const ov = document.createElement('div');
+    ov.className = 'overlay';
+
+    ov.innerHTML = `
+      <div class="card ws-modal" role="dialog" aria-modal="true">
+        <div class="no-print" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <b>معاينة ورقة العمل</b>
+          <div>
+            <button type="button" class="btn" id="ws-do-print">🖨️ طباعة الآن</button>
+            <button type="button" class="btn ghost" id="ws-close">إغلاق</button>
+          </div>
+        </div>
+        <div class="ws-paper">
+          <div class="ws-head">
+            <div>
+              <h2>دولة الكويت · وزارة التربية</h2>
+              <p>مادة: <b>${esc(s.name)}</b> · الصف: <b>${esc(s.grade)}</b></p>
+            </div>
+            <div style="text-align:end">
+              <h2 style="color:var(--brand)">منصة قِمّة</h2>
+              <p>ورقة تدريب درس: <b>${esc(title)}</b></p>
+            </div>
+          </div>
+          <div class="ws-meta">
+            <span>اسم الطالب: <b>${esc((p && !p.isGuest ? p.name : '') || '................................................')}</b></span>
+            <span>التاريخ: ____ / ____ / 2026 م</span>
+            <span>الدرجة: ______ / ${pool.length}</span>
+          </div>
+
+          <div class="ws-questions">
+            ${pool.map((q, idx) => `
+              <div class="ws-q">
+                <span class="ws-q-num">(${idx + 1})</span> <b>${esc(q.q)}</b>
+                ${q.type === 'mcq' && q.options ? `
+                  <div class="ws-opts">
+                    ${q.options.map(opt => `<div class="ws-opt"><span class="ws-opt-circ"></span> <span>${esc(opt)}</span></div>`).join('')}
+                  </div>
+                ` : q.type === 'fill' ? `
+                  <div style="margin-top:10px;padding:8px 0;border-bottom:1px solid #999;width:60%">الإجابة: </div>
+                ` : q.type === 'multi' && q.options ? `
+                  <div class="ws-opts">
+                    ${q.options.map(opt => `<div class="ws-opt"><span style="width:14px;height:14px;border:1.5px solid #666;display:inline-block"></span> <span>${esc(opt)}</span></div>`).join('')}
+                  </div>
+                ` : ''}
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="ws-ans-key">
+            <h3 style="margin:0 0 8px">نموذج الإجابات الصحيحة (لولي الأمر والمعلم):</h3>
+            <ol style="margin:0;padding-inline-start:20px;display:grid;grid-template-columns:repeat(2,1fr);gap:4px">
+              ${pool.map((q, i) => `<li><b>س${i + 1}:</b> ${esc(correctText(q))}</li>`).join('')}
+            </ol>
+          </div>
+        </div>
+      </div>`;
+
+    ov.querySelector('#ws-close').onclick = () => ov.remove();
+    ov.querySelector('#ws-do-print').onclick = () => window.print();
+    document.body.appendChild(ov);
+  }
+
   /* ---------- نافذة بدء الاختبار ---------- */
   function openStart(s, key) {
     let title, pool;
@@ -1023,18 +1749,31 @@
     const ov = document.createElement('div');
     ov.className = 'overlay';
     const draw = () => {
-      ov.innerHTML = `<div class="card" role="dialog" aria-modal="true">
+      ov.innerHTML = `<div class="card" role="dialog" aria-modal="true" style="max-width:440px">
         <h2>${esc(title)}</h2>
         <p class="sub" style="margin:0">${pool.length} سؤال · ${esc(subjLabel(s))}</p>
         <div class="modes">
           <button class="mode ${mode === 'practice' ? 'sel' : ''}" data-m="practice"><b>✏️ تدريب</b><small>تصحيح فوري بعد كل سؤال</small></button>
           <button class="mode ${mode === 'exam' ? 'sel' : ''}" data-m="exam"><b>⏱️ اختبار</b><small>النتيجة تظهر في النهاية فقط</small></button>
+          <button class="mode ${mode === 'flashcards' ? 'sel' : ''}" data-m="flashcards"><b>🗂️ بطاقات الحفظ</b><small>تقليب ومراجعة سريعة للمفاهيم</small></button>
         </div>
-        <div class="actions"><button class="btn ghost" data-x>إلغاء</button><button class="btn" data-go>ابدأ الاختبار</button></div>
+        <div class="actions" style="justify-content:space-between;margin-top:14px">
+          <button type="button" class="btn ghost small" id="ws-print-btn">🖨️ ورقة عمل</button>
+          <div>
+            <button class="btn ghost" data-x>إلغاء</button>
+            <button class="btn" data-go>${mode === 'flashcards' ? 'ابدأ البطاقات 🗂️' : 'ابدأ 🚀'}</button>
+          </div>
+        </div>
       </div>`;
       ov.querySelectorAll('[data-m]').forEach(b => b.onclick = () => { mode = b.dataset.m; draw(); });
       ov.querySelector('[data-x]').onclick = () => ov.remove();
-      ov.querySelector('[data-go]').onclick = () => { ov.remove(); startQuiz(s, key, title, pool, mode); };
+      const wsBtn = ov.querySelector('#ws-print-btn');
+      if (wsBtn) wsBtn.onclick = () => { ov.remove(); renderPrintWorksheet(s, title, pool); };
+      ov.querySelector('[data-go]').onclick = () => {
+        ov.remove();
+        if (mode === 'flashcards') startFlashcards(s, title, pool);
+        else startQuiz(s, key, title, pool, mode);
+      };
     };
     ov.onclick = e => { if (e.target === ov) ov.remove(); };
     draw();
@@ -1123,7 +1862,12 @@
       <div class="qhead"><span>السؤال ${idx + 1} من ${qs.length}</span><span class="timer" id="tm" role="timer" aria-label="الوقت المتبقي">${timerHtml()}</span></div>
       <div class="bar"><i style="width:${(idx + (checked || mode === 'exam' ? 1 : 0)) / qs.length * 100}%"></i></div>
       <section class="card">
-        <span class="kind">${esc(q.kind || 'سؤال')}</span>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span class="kind" style="margin:0">${esc(q.kind || 'سؤال')}</span>
+          <button type="button" class="btn-tts" id="q-tts" title="استمع للسؤال بصوت واضح" aria-label="استمع للسؤال">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+          </button>
+        </div>
         <p class="qtext">${esc(q.q)}</p>
         ${qImg(q)}
         <p class="hint">${hint}</p>
@@ -1155,7 +1899,18 @@
       quiz.resp[idx] = cur; renderQuestion();
     });
     const on = (sel, fn) => { const el = $app.querySelector(sel); if (el) el.onclick = fn; };
-    on('[data-check]', () => { quiz.checked[idx] = true; renderQuestion(); });
+    on('[data-check]', () => {
+      quiz.checked[idx] = true;
+      const sc = scoreOf(item.q, quiz.resp[idx]);
+      if (sc === 1) NQSound.playCorrect(); else NQSound.playWrong();
+      renderQuestion();
+    });
+    const ttsBtn = document.getElementById('q-tts');
+    if (ttsBtn) ttsBtn.onclick = () => {
+      ttsBtn.classList.add('speaking');
+      NQSound.speak(item.q.q);
+      setTimeout(() => ttsBtn.classList.remove('speaking'), 3500);
+    };
     on('[data-next]', () => { if (last) finish(); else { quiz.idx++; renderQuestion(); window.scrollTo(0, 0); } });
     on('[data-prev]', () => { quiz.idx--; renderQuestion(); });
     on('[data-finish]', async () => {
@@ -1201,6 +1956,7 @@
 
     lastResult = { rec, extras, items: q.qs.map((it, i) => ({ q: it.q, r: q.resp[i], s: scores[i] })) };
     quiz = null;
+    if (pct >= 85) { NQSound.playWin(); } else { NQSound.playCorrect(); }
     go('#result');
   }
 
@@ -1221,6 +1977,7 @@
           ${rec.kind ? `<a class="btn" href="${rec.kind === 'daily' ? '#daily' : '#duel-' + esc(rec.key.split('/')[1] || '')}">${rec.kind === 'daily' ? '📅 ترتيب تحدي اليوم' : '⚔️ نتيجة التحدي'}</a>`
             : `<button class="btn" id="again">إعادة الاختبار</button>
           <a class="btn ghost" href="#subject-${rec.subjectId}">العودة للدروس</a>`}
+          <button type="button" class="btn wa-btn" id="share-wa"><span>📲 مشاركة النتيجة واتساب</span></button>
           <a class="btn ghost" href="#home">لوحتي</a>
         </div>
         <div class="review">
@@ -1235,6 +1992,22 @@
         </div>
       </section>`;
     const ag = document.getElementById('again'); if (ag && s) ag.onclick = () => openStart(s, rec.key);
+    const shareWa = document.getElementById('share-wa');
+    if (shareWa) {
+      shareWa.onclick = () => {
+        const studentName = state.name || 'طالب';
+        const subjName = s ? (s.name || subjLabel(s)) : (rec.title || 'الاختبار');
+        const text = `🎉 حقق الطالب (${studentName}) نتيجة رائعة في منصة مسابقة التعليمية!\n` +
+          `📚 المادة: ${subjName}\n` +
+          `📝 الاختبار: ${rec.title}\n` +
+          `🎯 النسبة: ${rec.pct}%\n` +
+          `🏆 التقدير: ${g.t}\n` +
+          `⏱️ الوقت: ${fmtTime(rec.secs)}\n` +
+          `🚀 جرب المنصة وتحداني في المذاكرة!`;
+        const url = 'https://api.whatsapp.com/send?text=' + encodeURIComponent(text);
+        window.open(url, '_blank');
+      };
+    }
     G('resultExtras', rec, lastResult.extras);
   }
 
@@ -1312,8 +2085,10 @@
     store, cur, persist, SUBJECTS, GRADES, allQuestions, subjectById, gradeOf, esc, toast, ask, go, route,
     startQuiz, openStart, records, respText, correctText, qImg, hashPin, avatarHtml, AVATARS, fmtDate, fmtTime, shuffle, newId, subjectStats, streakDays, validPin, weakPin, digitsOnly, pinInput,
     joinFamily, familyJoinDialog, syncNow: () => initCloud(), get cloudKind() { return cloudKind; }, get synced() { return !!cloud; },
-    get grade() { return curGrade; }, renderHome: () => renderHome(), app: $app
+    get grade() { return curGrade; }, renderHome: () => renderHome(), app: $app,
+    openPomodoro, startFlashcards, renderPrintWorksheet, NQSound, NQTheme
   };
+  initTopbarTools();
   route();
   initCloud();
   G('init');
