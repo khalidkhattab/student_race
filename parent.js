@@ -191,6 +191,13 @@
 
   /* ================= لوحة ولي الأمر: أقسام تقرير الابن ================= */
   const HOURS = Array.from({ length: 24 }, (_, i) => i);
+  // رموز تعبيرية يضيفها ولي الأمر لرسالته (مجموعات: تشجيع، محبة، احتفال، دراسة)
+  const EMOJIS = [
+    ['تشجيع', ['🌟', '⭐', '👏', '💪', '👍', '💯', '🔥', '✨']],
+    ['محبة', ['❤️', '💚', '🤗', '😊', '😍', '🥰', '🙏', '😘']],
+    ['احتفال', ['🎉', '🏆', '🥇', '🎁', '🎈', '🍦', '🍕', '⚽']],
+    ['دراسة', ['📚', '✏️', '🧠', '⏰', '🎯', '🚀', '📖', '✅']]
+  ];
   const MSGS = ['أحسنت! أنا فخور بك 🌟', 'استمر، أنت تتحسن كل يوم 💪', 'لا تستسلم، المحاولة القادمة أفضل ❤️', 'أنهِ واجبك اليوم وتنتظرك مفاجأة 🎁'];
   function kidHtml(p, period) {
     const NQ = N(), subs = NQ.SUBJECTS.filter(s => s.grade === p.grade);
@@ -255,6 +262,7 @@
           ${p.msg && p.msg.text ? `<div class="px-sent"><p>«${esc(p.msg.text)}»</p><small>${p.msg.seen ? `قرأها ✓ · ${NQ.fmtDate(p.msg.seen)}` : `أُرسلت ${NQ.fmtDate(p.msg.t)} · لم تُقرأ بعد`}</small></div>` : ''}
           <div class="px-chips">${MSGS.map((m, i) => `<button type="button" class="chip-b" data-msgq="${i}">${esc(m)}</button>`).join('')}</div>
           <form class="px-form" id="px-msg"><label class="wide"><span class="sr">نص الرسالة</span><textarea id="px-mt" maxlength="140" rows="2" placeholder="اكتب رسالة قصيرة…" required></textarea></label><button class="btn" type="submit">إرسال</button></form>
+          <div class="px-emojis" role="group" aria-label="رموز تعبيرية للرسالة">${EMOJIS.map(([g, list]) => `<div class="px-emo-row"><small>${g}</small><div>${list.map(e => `<button type="button" class="px-emo" data-emo="${e}" aria-label="أضف ${e}">${e}</button>`).join('')}</div></div>`).join('')}</div>
         </div>
       </section>
       <section class="card px-card">
@@ -305,6 +313,13 @@
     };
     const mt = document.getElementById('px-mt');
     app.querySelectorAll('[data-msgq]').forEach(b => b.onclick = () => { mt.value = MSGS[+b.dataset.msgq]; mt.focus(); });
+    // إدراج الرمز مكان المؤشر (مع احترام الحد الأقصى 140 حرفاً)
+    app.querySelectorAll('[data-emo]').forEach(b => b.onclick = () => {
+      const e = b.dataset.emo, s = mt.selectionStart ?? mt.value.length, en = mt.selectionEnd ?? s;
+      const next = mt.value.slice(0, s) + e + mt.value.slice(en);
+      if (next.length > 140) { NQ.toast('الرسالة وصلت للحد الأقصى (140 حرفاً)'); return; }
+      mt.value = next; mt.focus(); const pos = s + e.length; mt.setSelectionRange(pos, pos);
+    });
     const mf = document.getElementById('px-msg');
     if (mf) mf.onsubmit = e => { e.preventDefault(); const t = mt.value.trim().slice(0, 140); if (!t) return; p.msg = { text: t, t: Date.now(), seen: null }; NQ.persist(); NQ.toast('تم إرسال الرسالة ✓'); rerender(); };
     const ef = document.getElementById('px-eadd');
