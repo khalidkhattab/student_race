@@ -1280,3 +1280,10 @@ h1{font-weight:900}h2{font-weight:800}
   body.px-printing,body.ws-printing{background:#fff!important}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }@media (max-width:600px){.topbar .brand span.bn{display:block;font-size:1.25rem}}
+/* اختبار التجربة: اختيار الصف */
+.lp-quiz-tag{border:0;font:inherit;font-size:12px;font-weight:700;cursor:pointer;min-height:28px}
+.lp-quiz-tag:hover{filter:brightness(.95)}
+.lp-grades{display:flex;flex-direction:column;gap:10px}
+.lp-grade{min-height:52px;border-radius:14px;border:1.5px solid #dfe7e3;background:#fff;color:#10233f;font:inherit;font-weight:700;font-size:18px;cursor:pointer}
+.lp-grade:hover{border-color:#0f766e;background:#f2faf6}
+.lp-link{background:none;border:0;color:#0f766e;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer;min-height:40px}

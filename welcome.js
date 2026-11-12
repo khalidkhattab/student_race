@@ -66,7 +66,7 @@
         <path d="M0 340h620v100H0z" fill="#e9f6f0"/>
       </svg>
       <div class="lp-quiz" id="lp-quiz" aria-live="polite">
-        <span class="lp-quiz-tag">جرّبه الآن</span>
+        <button type="button" class="lp-quiz-tag" id="lp-grade-tag">جرّبه الآن</button>
         <div class="lp-quiz-head">${ICON.flask}<b>تحدّي القمّة</b></div>
         <div class="lp-quiz-body" id="lp-quiz-body"></div>
       </div>
@@ -91,31 +91,76 @@
   };
 
   // تشغيل الاختبار التجريبي والتبويبات بعد عرض الصفحة
+  // أسئلة عشوائية من صف الزائر: سؤال من كل مادة قدر الإمكان، والخيارات مخلوطة
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const mix = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const KEY_G = 'nq_try_grade';
+  const lget = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const lset = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { } };
+  function randomFive(grade) {
+    const subs = (window.SUBJECTS || []).filter(s => s.grade === grade).map(s => ({
+      s, qs: s.units.flatMap(u => u.lessons.flatMap(l => l.questions)).filter(q => q.type === 'mcq' && q.options && q.options.length >= 2 && !q.img)
+    })).filter(x => x.qs.length);
+    if (!subs.length) return [];
+    const order = mix(subs), out = [], used = new Set();
+    for (let i = 0; out.length < 5 && i < 40; i++) {
+      const x = order[i % order.length], q = x.qs[Math.floor(Math.random() * x.qs.length)];
+      if (used.has(q.id)) continue; used.add(q.id);
+      const idx = q.options.map((_, k) => k), ord = q.tf ? idx : mix(idx);
+      out.push({ s: x.s.name, q: q.q, o: ord.map(k => q.options[k]), a: ord.indexOf(q.answer), e: q.explain || ('الإجابة الصحيحة: ' + q.options[q.answer]) });
+    }
+    return out;
+  }
+
   window.WELCOME_INIT = function (root) {
-    const st = { qi: 0, picked: null, score: 0 };
-    const body = root.querySelector('#lp-quiz-body');
+    const grades = (window.NQ_GRADES && window.NQ_GRADES.length) ? window.NQ_GRADES : ['الصف السادس', 'الصف الثامن', 'الصف العاشر'];
+    const remembered = [lget(KEY_G), lget('nq_grade')].find(g => g && grades.includes(g)) || null;
+    const st = { grade: null, qs: [], qi: 0, picked: null, score: 0, loading: false };
+    const body = root.querySelector('#lp-quiz-body'), tag = root.querySelector('#lp-grade-tag');
+    const focusFirst = () => { const f = body.querySelector('button'); if (f) f.focus({ preventScroll: true }); };
+    async function start(grade) {
+      st.grade = grade; lset(KEY_G, grade); st.loading = true; draw();
+      try { if (window.NQLoadGrade) await window.NQLoadGrade(grade); } catch (e) { }
+      st.qs = randomFive(grade);
+      if (!st.qs.length) st.qs = QS.map(q => Object.assign({}, q));
+      st.qi = 0; st.picked = null; st.score = 0; st.loading = false; draw();
+    }
     function draw() {
-      if (st.qi >= QS.length) {
-        const deg = Math.round(st.score / QS.length * 360);
-        const title = st.score === 5 ? 'ممتاز! أنت على القمّة' : st.score >= 3 ? 'أحسنت! بداية قوية' : 'بداية جيدة، والقمّة تنتظرك';
-        body.innerHTML = `<div class="lp-result"><div class="lp-ring" role="img" aria-label="نتيجتك ${ar(st.score)} من ٥" style="background:conic-gradient(#14a38b ${deg}deg,#e6efeb 0)"><span><b>${ar(st.score)}</b><small>من ٥</small></span></div>
-          <b class="lp-res-title">${title}</b><p>${st.score === 5 ? 'أجبت عن كل الأسئلة بشكل صحيح.' : 'سجّل مجاناً لتراجع أخطاءك وتتابع تقدّمك.'}</p>
-          <div class="lp-res-btns"><a href="#login" class="lp-btn primary sm">ابدأ رحلتك مجاناً</a><button type="button" class="lp-btn ghost sm" data-restart>أعد المحاولة</button></div></div>`;
-        body.querySelector('[data-restart]').onclick = () => { st.qi = 0; st.picked = null; st.score = 0; draw(); body.querySelector('button').focus(); };
+      tag.textContent = st.grade ? st.grade + ' · تغيير' : 'جرّبه الآن';
+      tag.setAttribute('aria-label', st.grade ? 'تغيير الصف، الصف الحالي ' + st.grade : 'جرّب الاختبار');
+      if (!st.grade) {
+        body.innerHTML = `<p class="lp-q">اختر صفك لتبدأ ٥ أسئلة من موادك:</p>
+          <div class="lp-grades">${grades.map(g => `<button type="button" class="lp-grade" data-g="${esc(g)}">${esc(g)}</button>`).join('')}</div>
+          <p class="lp-ex">الأسئلة عشوائية من بنك أسئلة المنصة، وتتغيّر في كل مرة.</p>`;
+        body.querySelectorAll('[data-g]').forEach(b => b.onclick = () => start(b.dataset.g).then(focusFirst));
         return;
       }
-      const Q = QS[st.qi], ans = st.picked != null, right = ans && st.picked === Q.a;
-      const pct = Math.round((st.qi + (ans ? 1 : 0)) / QS.length * 100);
-      body.innerHTML = `<div class="lp-prog"><span>السؤال ${ar(st.qi + 1)} من ٥</span><span class="bar"><i style="width:${pct}%"></i></span><span>${Q.s}</span></div>
-        <p class="lp-q">${Q.q}</p>
-        <div class="lp-opts">${Q.o.map((o, i) => { const cls = !ans ? '' : i === Q.a ? 'right' : i === st.picked ? 'wrong' : 'dim'; return `<button type="button" class="lp-opt ${cls}" data-o="${i}" ${ans ? 'disabled' : ''}><span class="mk">${ans && i === Q.a ? '✓' : ans && i === st.picked ? '✗' : ''}</span>${o}</button>`; }).join('')}</div>
-        ${ans ? `<div class="lp-fb"><b class="${right ? 'ok' : 'no'}">${right ? 'إجابة صحيحة!' : 'إجابة خاطئة'}</b><button type="button" class="lp-btn primary sm" data-next>${st.qi === QS.length - 1 ? 'اعرض نتيجتي' : 'السؤال التالي ←'}</button></div><p class="lp-ex">${Q.e}</p>` : ''}`;
+      if (st.loading) { body.innerHTML = '<div class="lp-result"><p>⏳ جارٍ تجهيز أسئلة ' + esc(st.grade) + '…</p></div>'; return; }
+      const total = st.qs.length;
+      if (st.qi >= total) {
+        const deg = Math.round(st.score / total * 360);
+        const title = st.score === total ? 'ممتاز! أنت على القمّة' : st.score >= Math.ceil(total * 0.6) ? 'أحسنت! بداية قوية' : 'بداية جيدة، والقمّة تنتظرك';
+        body.innerHTML = `<div class="lp-result"><div class="lp-ring" role="img" aria-label="نتيجتك ${ar(st.score)} من ${ar(total)}" style="background:conic-gradient(#14a38b ${deg}deg,#e6efeb 0)"><span><b>${ar(st.score)}</b><small>من ${ar(total)}</small></span></div>
+          <b class="lp-res-title">${title}</b><p>${st.score === total ? 'أجبت عن كل الأسئلة بشكل صحيح.' : 'سجّل مجاناً لتراجع أخطاءك وتتابع تقدّمك.'}</p>
+          <div class="lp-res-btns"><a href="#login" class="lp-btn primary sm">ابدأ رحلتك مجاناً</a><button type="button" class="lp-btn ghost sm" data-again>٥ أسئلة جديدة</button></div>
+          <button type="button" class="lp-link" data-grade>تغيير الصف</button></div>`;
+        body.querySelector('[data-again]').onclick = () => start(st.grade).then(focusFirst);
+        body.querySelector('[data-grade]').onclick = () => { st.grade = null; draw(); focusFirst(); };
+        return;
+      }
+      const Q = st.qs[st.qi], ans = st.picked != null, right = ans && st.picked === Q.a;
+      const pct = Math.round((st.qi + (ans ? 1 : 0)) / total * 100);
+      body.innerHTML = `<div class="lp-prog"><span>السؤال ${ar(st.qi + 1)} من ${ar(total)}</span><span class="bar"><i style="width:${pct}%"></i></span><span>${esc(Q.s)}</span></div>
+        <p class="lp-q" dir="auto">${esc(Q.q)}</p>
+        <div class="lp-opts">${Q.o.map((o, i) => { const cls = !ans ? '' : i === Q.a ? 'right' : i === st.picked ? 'wrong' : 'dim'; return `<button type="button" class="lp-opt ${cls}" data-o="${i}" ${ans ? 'disabled' : ''}><span class="mk">${ans && i === Q.a ? '✓' : ans && i === st.picked ? '✗' : ''}</span><span dir="auto">${esc(o)}</span></button>`; }).join('')}</div>
+        ${ans ? `<div class="lp-fb"><b class="${right ? 'ok' : 'no'}">${right ? 'إجابة صحيحة!' : 'إجابة خاطئة'}</b><button type="button" class="lp-btn primary sm" data-next>${st.qi === total - 1 ? 'اعرض نتيجتي' : 'السؤال التالي ←'}</button></div><p class="lp-ex">${esc(Q.e)}</p>` : ''}`;
       body.querySelectorAll('[data-o]').forEach(b => b.onclick = () => { if (st.picked != null) return; st.picked = +b.dataset.o; if (st.picked === Q.a) st.score++; draw(); const n = body.querySelector('[data-next]'); if (n) n.focus(); });
-      const nx = body.querySelector('[data-next]'); if (nx) nx.onclick = () => { st.qi++; st.picked = null; draw(); const f = body.querySelector('button'); if (f) f.focus(); };
+      const nx = body.querySelector('[data-next]'); if (nx) nx.onclick = () => { st.qi++; st.picked = null; draw(); focusFirst(); };
     }
-    draw();
+    tag.onclick = () => { st.grade = null; st.loading = false; draw(); focusFirst(); };
+    if (remembered) start(remembered); else draw();
     const tryBtn = root.querySelector('[data-try]');
-    if (tryBtn) tryBtn.onclick = () => { const q = root.querySelector('#lp-quiz'); q.scrollIntoView({ behavior: 'smooth', block: 'center' }); const f = body.querySelector('button'); if (f) setTimeout(() => f.focus({ preventScroll: true }), 400); };
+    if (tryBtn) tryBtn.onclick = () => { const q = root.querySelector('#lp-quiz'); q.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(focusFirst, 400); };
     const items = root.querySelector('#lp-role-items');
     const showRole = id => { items.innerHTML = ROLES[id].map(([t, s], i) => `<div class="lp-role-item"><span>${ar(i + 1)}</span><div><b>${t}</b><small>${s}</small></div></div>`).join(''); };
     root.querySelectorAll('[data-role]').forEach(b => b.onclick = () => {
