@@ -4,7 +4,7 @@
   const ar = n => Number(n).toLocaleString('ar-EG');
   const ICON = {
     trophy: '<svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0z"/><path d="M17 5h3v2a3 3 0 01-3 3M7 5H4v2a3 3 0 003 3"/></svg>',
-    play: '<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M7 4l13 8-13 8z"/></svg>',
+    school: '<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5M22 9v6"/></svg>',
     login: '<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><path d="M10 17l-5-5 5-5M5 12h11"/></svg>',
     layers: '<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>',
     crown: '<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"/></svg>',
@@ -51,7 +51,7 @@
       <p class="lp-count"><span></span>أكثر من ٢٬٠٠٠ سؤال للصف السادس والثامن والعاشر<span></span></p>
       <div class="lp-ctas">
         <a href="#login" class="lp-btn primary">${ICON.trophy}ابدأ رحلتك مجاناً</a>
-        <button type="button" class="lp-btn ghost" data-try>${ICON.play}جرّب ٥ أسئلة</button>
+        <a href="#staff" class="lp-btn ghost">${ICON.school}للمعلمين والمدارس</a>
       </div>
       <ul class="lp-perks"><li class="gold">${ICON.bolt}نتيجة فورية</li><li>${ICON.layers}مراجعة ذكية لأخطائك</li><li class="orange">${ICON.medal}منافسة ممتعة</li></ul>
     </div>
@@ -159,8 +159,6 @@
     }
     tag.onclick = () => { st.grade = null; st.loading = false; draw(); focusFirst(); };
     if (remembered) start(remembered); else draw();
-    const tryBtn = root.querySelector('[data-try]');
-    if (tryBtn) tryBtn.onclick = () => { const q = root.querySelector('#lp-quiz'); q.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(focusFirst, 400); };
     const items = root.querySelector('#lp-role-items');
     const showRole = id => { items.innerHTML = ROLES[id].map(([t, s], i) => `<div class="lp-role-item"><span>${ar(i + 1)}</span><div><b>${t}</b><small>${s}</small></div></div>`).join(''); };
     root.querySelectorAll('[data-role]').forEach(b => b.onclick = () => {
