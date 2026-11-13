@@ -1467,3 +1467,49 @@ h1{font-weight:900}h2{font-weight:800}
   .pg-head .db-btns{width:100%}.pg-head .db-btns .btn{flex:1}
 }
 @media (prefers-reduced-motion: reduce){ .sp-pulse,.streak-warn>span{animation:none} }
+
+/* ===== صفحة المعلم: ملخص الفصل، الواجبات، خريطة الإتقان، الأبطال، الجدول ===== */
+.sc-idle{border:1.5px solid #f5b26b;background:#fff8ef}
+.sc-idle-names{margin:4px 0 0;line-height:1.9;color:var(--ink)}
+.sc-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin:0 0 10px}
+.sc-tools input[type=search]{flex:1 1 220px;min-height:44px;padding:8px 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font:inherit}
+.sc-sort{border:0;background:none;padding:0;font:inherit;font-weight:800;color:inherit;cursor:pointer;white-space:nowrap}
+.sc-sort:hover{color:var(--brand)}
+.sc-tasks{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.sc-task{border:1.5px solid var(--line);border-radius:14px;background:var(--card)}
+.sc-task[open]{border-color:var(--brand)}
+.sc-task summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 14px}
+.sc-task summary::-webkit-details-marker{display:none}
+.sc-task summary>div{flex:1;min-width:0;display:flex;flex-direction:column}
+.sc-task summary small{color:var(--muted)}
+.sc-task-n{flex:none;display:flex;flex-direction:column;align-items:center;padding:4px 12px;border-radius:12px;background:var(--brand-soft);color:var(--brand)}
+.sc-task-n small{font-size:.75rem;color:var(--muted)}
+.sc-task-body{padding:0 14px 12px}
+.sc-task-list{list-style:none;margin:0 0 8px;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px 14px}
+.sc-task-list li{display:flex;align-items:center;gap:8px;padding:4px 0}
+.sc-task-list li>span{width:20px;text-align:center;color:var(--muted)}
+.sc-task-list li.ok>span{color:var(--ok);font-weight:800}
+.sc-task-list li b,.sc-task-list li small{margin-inline-start:auto}
+.sc-weakl{margin:0 0 10px;padding:10px 14px;border-radius:12px;background:#fff1e0;color:#7a3a00}
+.mm-wrap{max-height:520px}
+.mm{border-collapse:separate;border-spacing:3px;font-size:.85rem}
+.mm th,.mm td{text-align:center;padding:0}
+.mm thead th{position:sticky;top:0;background:var(--card);z-index:1;min-width:46px;padding:4px 2px;font-weight:700}
+.mm thead th span{display:block;white-space:nowrap}
+.mm thead th small{display:block;font-weight:800}
+.mm .mm-name{position:sticky;right:0;background:var(--card);z-index:2;text-align:start;padding:4px 8px;white-space:nowrap;font-weight:700;min-width:110px}
+.mm td{height:34px;min-width:46px;border-radius:8px;font-weight:800}
+.mm-0{background:var(--chip)}
+.mm-1{background:#fbd5c4;color:#8a2c0d}
+.mm-2{background:#cfeee4;color:#0f5c50}
+.mm-3{background:#0f766e;color:#fff}
+.sp-legend i.mm-0{background:var(--chip);border:1px solid var(--line)}.sp-legend i.mm-1{background:#fbd5c4}.sp-legend i.mm-2{background:#cfeee4}.sp-legend i.mm-3{background:#0f766e}
+.sc-heroes{list-style:none;margin:6px 0 12px;padding:0;display:flex;flex-direction:column;gap:6px}
+.sc-heroes li{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:12px;background:var(--chip)}
+.sc-heroes li>span{width:28px;text-align:center;font-size:1.2rem;font-weight:800}
+.sc-heroes li small{margin-inline-start:auto;color:var(--muted)}
+.sc-class{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.sc-stat{font-size:.82rem;color:var(--muted);font-weight:600}
+.sc-class.warn{border-color:#f5b26b}
+.sc-down{color:var(--bad);font-weight:800}
+.sc-cmsg{background:linear-gradient(135deg,var(--brand-soft),var(--chip))}

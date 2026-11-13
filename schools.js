@@ -290,7 +290,7 @@
       ${me.role === 'school' ? `<section class="card"><div class="pg-row"><h2>المعلمون (${num(teachers.filter(t => t.role === 'teacher').length)})</h2><button type="button" class="btn small" id="st-inv">+ دعوة معلمين</button></div>
         <ul class="pg-list">${teachers.map(t => `<li><div><b>${esc(t.name)}</b><small>${t.role === 'school' ? 'حساب المدرسة' : 'معلم'}</small></div>${t.role === 'teacher' ? `<button type="button" class="linkish" data-rm="${t.id}">إزالة</button>` : ''}</li>`).join('')}</ul></section>` : ''}
       <section class="card"><div class="pg-row"><h2>الفصول (${num(classes.length)})</h2></div>
-        ${classes.length ? `<div class="sc-classes">${classes.map(c => `<button type="button" class="sc-class" data-cls="${c.id}"><b>${esc(c.grade)} · ${esc(c.section)}</b><small>${esc(subjLabel(c))}${c.title ? ' · ' + esc(c.title) : ''}${me.role === 'school' ? ' · ' + esc(tname.get(c.teacher) || '') : ''}</small></button>`).join('')}</div>` : '<p class="empty">لا توجد فصول بعد.</p>'}
+        ${classes.length ? `<div class="sc-classes">${classes.map(c => `<button type="button" class="sc-class" data-cls="${c.id}"><b>${esc(c.grade)} · ${esc(c.section)}</b><small>${esc(subjLabel(c))}${c.title ? ' · ' + esc(c.title) : ''}${me.role === 'school' ? ' · ' + esc(tname.get(c.teacher) || '') : ''}</small><span class="sc-stat" data-stat="${c.id}">⏳</span></button>`).join('')}</div>` : '<p class="empty">لا توجد فصول بعد.</p>'}
         <form class="px-form" id="st-add"><label><span>الصف</span><select id="st-g">${gradeOpts('الصف العاشر')}</select></label>
           <label><span>الشعبة</span><input id="st-s" required maxlength="10" placeholder="مثال: 3"></label>
           <label><span>المادة التي تدرّسها</span><select id="st-sub" required><option value="">— اختر —</option>${subjectOpts()}</select></label>
@@ -315,10 +315,26 @@
         N().go('#staff-class-' + cid); }
       catch (x) { N().toast(errTxt(x)); }
     };
+    // ملخص كل فصل: عدد الطلاب والنشطين ومتوسط الأسبوع، مع تنبيه عند التراجع
+    classStats(classes.slice(0, 30));
     // ترتيب المدرسة من لوحة الشرف المشتركة
     const el = document.getElementById('st-rank');
     try { const list = await window.NQGame.backend.list(true); el.innerHTML = schoolBoardHtml(list.filter(x => x.cls && x.cls.sid === me.sid)); }
     catch (e) { el.innerHTML = '<p class="muted">تعذّر تحميل الترتيب.</p>'; }
+  }
+  async function classStats(classes) {
+    const now = Date.now(), avg = rs => rs.length ? Math.round(rs.reduce((a, r) => a + r.pct, 0) / rs.length) : null;
+    await Promise.all(classes.map(async c => {
+      const el = document.querySelector(`[data-stat="${c.id}"]`); if (!el) return;
+      try {
+        const rows = await db.query('students', [], { parent: 'classes/' + c.id, limit: 200 });
+        const kids = rows.map(r => { try { return JSON.parse(r.json); } catch (e) { return null; } }).filter(Boolean);
+        const w = kids.map(p => (p.records || []).filter(r => r.date > now - 7 * DAY)), pw = kids.flatMap(p => (p.records || []).filter(r => r.date > now - 14 * DAY && r.date <= now - 7 * DAY));
+        const act = w.filter(x => x.length).length, a = avg(w.flat()), b = avg(pw), down = a != null && b != null && a <= b - 5;
+        el.innerHTML = kids.length ? `${kidsN(kids.length)} · ${num(act)} نشط هذا الأسبوع${a != null ? ` · متوسط ${num(a)}٪` : ''}${down ? ` <b class="sc-down" title="تراجع عن الأسبوع الماضي">⚠️ تراجع ${num(b - a)}٪</b>` : ''}` : 'لم ينضم طلاب بعد';
+        if (down) el.closest('.sc-class').classList.add('warn');
+      } catch (e) { el.textContent = ''; }
+    }));
   }
   function schoolBoardHtml(entries) {
     const wk = window.NQGame._weekKey();
@@ -329,6 +345,21 @@
   }
 
   /* ----- فصل واحد ----- */
+  // مواد المعلم في هذا الفصل (مربي الفصل: كل مواد الصف)
+  const teachSubs = c => { const all = gradeSubs(c.grade); if (!c.subject || c.subject === ALL_SUBJ) return all; const m = all.filter(s => s.name === c.subject); return m.length ? m : all; };
+  function keyTitle(s, key) {
+    const [u, l] = String(key).split('/'); const unit = s.units.find(x => x.id === u); if (!unit) return null;
+    if (l === 'exam') return 'الاختبار الشامل – ' + unit.name.split(':')[0];
+    const les = unit.lessons.find(x => x.id === l); return les ? les.short + ': ' + les.name : null;
+  }
+  const pad2 = n => String(n).padStart(2, '0');
+  const ymd = (d = new Date()) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const dueTxt = d => { if (!d) return 'بدون موعد'; const n = Math.round((new Date(d + 'T00:00') - new Date(ymd() + 'T00:00')) / DAY); return n < 0 ? 'انتهى الموعد' : n === 0 ? 'آخر موعد اليوم' : n === 1 ? 'آخر موعد غداً' : `آخر موعد بعد ${num(n)} أيام`; };
+  const clsView = { sort: 'name', dir: 1, q: '', need: false, mapSid: null };
+  // العدد مع التمييز الصحيح: (عدد، مفرد، مثنى، جمع، تمييز للأحد عشر فأكثر)
+  const cnt = (n, one, two, few, many) => n === 1 ? one : n === 2 ? two : `${num(n)} ${n >= 3 && n <= 10 ? few : many}`;
+  const kidsN = n => cnt(n, 'طالب واحد', 'طالبان', 'طلاب', 'طالباً'), testsN = n => cnt(n, 'اختبار واحد', 'اختباران', 'اختبارات', 'اختباراً');
+
   async function renderClass(cid) {
     const u = await needUser(() => renderClass(cid)); if (!u) return;
     const app = N().app; app.innerHTML = '<p class="empty">⏳ جارٍ تحميل الفصل…</p>';
@@ -339,43 +370,176 @@
     if (window.NQLoadGrade) await window.NQLoadGrade(c.grade).catch(() => { });
     const NQ = N();
     const kids = rows.map(r => { try { const p = JSON.parse(r.json); p._doc = r.id; return p; } catch (e) { return null; } }).filter(Boolean);
-    const now = Date.now(), wk = now - 7 * DAY;
+    const now = Date.now(), wk = now - 7 * DAY, pwk = now - 14 * DAY;
+    const avgP = rs => rs.length ? Math.round(rs.reduce((a, r) => a + r.pct, 0) / rs.length) : null;
     const sum = p => {
       const rs = p.records || [], w = rs.filter(r => r.date > wk);
       const last = rs.reduce((m, r) => !m || r.date > m.date ? r : m, null);
       const subs = allowedSubs(p).map(s => ({ s, st: NQ.subjectStats(s, rs) })).filter(x => x.st.level != null);
       const lvl = subs.length ? Math.round(subs.reduce((a, x) => a + x.st.level, 0) / subs.length) : null;
       const weak = subs.slice().sort((a, b) => a.st.level - b.st.level)[0];
-      return { w: w.length, q: w.reduce((a, r) => a + (r.total || 0), 0), avg: w.length ? Math.round(w.reduce((a, r) => a + r.pct, 0) / w.length) : null, last, lvl, weak };
+      return { w: w.length, q: w.reduce((a, r) => a + (r.total || 0), 0), avg: avgP(w), last, lvl, weak, need: !!(weak && weak.st.level < 65), xp: w.reduce((a, r) => a + (r.xp || 0), 0) };
     };
-    const list = kids.map(p => ({ p, k: sum(p) })).sort((a, b) => a.p.name.localeCompare(b.p.name, 'ar'));
-    // أكثر الأسئلة خطأً في الفصل (آخر 30 يوماً)
+    const list = kids.map(p => ({ p, k: sum(p) }));
+    const color = v => v == null ? 'var(--muted)' : NQ.gradeOf(v).c;
+    const ago = r => { if (!r) return 'لم يبدأ'; const d = Math.floor((new Date().setHours(0, 0, 0, 0) - new Date(r.date).setHours(0, 0, 0, 0)) / DAY); return d <= 0 ? 'اليوم' : d === 1 ? 'أمس' : `منذ ${num(d)} أيام`; };
+    const first = n => String(n || '').trim().split(/\s+/)[0];
+
+    // 1) ملخص الفصل
+    const active = list.filter(x => x.k.w > 0).length;
+    const cAvg = avgP(kids.flatMap(p => (p.records || []).filter(r => r.date > wk))), cPrev = avgP(kids.flatMap(p => (p.records || []).filter(r => r.date > pwk && r.date <= wk)));
+    const idle = list.filter(x => !x.k.w);
+    const trend = cAvg != null && cPrev != null ? (cAvg - cPrev > 0 ? `<span class="pr-up">▲ ${num(cAvg - cPrev)}٪</span>` : cAvg - cPrev < 0 ? `<span class="pr-down">▼ ${num(cPrev - cAvg)}٪</span>` : '<span class="pr-flat">بدون تغيير</span>') : '<span class="pr-flat">لا توجد مقارنة</span>';
+    const summary = `<section class="pg-tiles">
+        <div class="card pg-tile"><small>نشطون هذا الأسبوع</small><b>${num(active)} / ${num(kids.length)}</b><small class="note muted">${kids.length ? num(Math.round(active / kids.length * 100)) + '٪ من الفصل' : '—'}</small></div>
+        <div class="card pg-tile"><small>متوسط الفصل (7 أيام)</small><b style="color:${color(cAvg)}">${cAvg == null ? '—' : num(cAvg) + '٪'}</b><small class="note">${trend}</small></div>
+        <div class="card pg-tile"><small>أسئلة الفصل هذا الأسبوع</small><b>${num(list.reduce((a, x) => a + x.k.q, 0))}</b><small class="note muted">${testsN(list.reduce((a, x) => a + x.k.w, 0))}</small></div>
+        <div class="card pg-tile"><small>يحتاجون متابعة</small><b style="color:${list.some(x => x.k.need) ? 'var(--bad)' : 'inherit'}">${num(list.filter(x => x.k.need).length)}</b><small class="note muted">مستوى أقل من 65٪ في مادة</small></div>
+      </section>
+      ${idle.length && kids.length ? `<section class="card sc-idle"><div class="pg-row"><h2>😴 لم يذاكروا منذ 7 أيام (${num(idle.length)})</h2><button type="button" class="btn ghost small" id="cl-remind">📋 نسخ رسالة تذكير للجروب</button></div>
+        <p class="sc-idle-names">${idle.map(x => esc(x.p.name)).join('، ')}</p></section>` : ''}`;
+
+    // 2) واجبات الفصل
+    const subsT = teachSubs(c), tasks = (Array.isArray(c.tasks) ? c.tasks : []).slice().sort((a, b) => b.created - a.created);
+    const taskRows = t => {
+      const s = NQ.subjectById(t.sid);
+      const elig = kids.filter(p => allowedSubs(p).some(x => x.id === t.sid));
+      const res = elig.map(p => { const r = (p.records || []).filter(r => r.subjectId === t.sid && r.key === t.key && r.date >= t.created).sort((a, b) => b.pct - a.pct)[0]; return { p, r }; });
+      const done = res.filter(x => x.r);
+      return { s, elig, res, done, avg: avgP(done.map(x => x.r)) };
+    };
+    const tasksCard = `<section class="card"><h2>📌 واجبات الفصل</h2>
+      <p class="muted" style="margin:0 0 10px">يظهر الواجب لكل طلاب الفصل في «خطة اليوم» على صفحتهم، وتتابع هنا من أنجزه.</p>
+      <form class="px-form" id="cl-tadd">
+        <label><span>المادة</span><select id="cl-ts">${subsT.map(s => `<option value="${s.id}">${s.icon} ${esc(s.name)}</option>`).join('')}</select></label>
+        <label class="wide"><span>الدرس</span><select id="cl-tk"></select></label>
+        <label><span>آخر موعد</span><input type="date" id="cl-td" min="${ymd()}" value="${ymd(new Date(now + 3 * DAY))}"></label>
+        <button class="btn" type="submit">إرسال للفصل</button>
+      </form>
+      ${tasks.length ? `<div class="sc-tasks">${tasks.slice(0, 12).map(t => { const x = taskRows(t); return `<details class="sc-task"><summary><div><b>${esc(t.title)}</b><small>${x.s ? x.s.icon + ' ' + esc(x.s.name) + ' · ' : ''}${dueTxt(t.due)}</small></div>
+          <span class="sc-task-n"><b>${num(x.done.length)} / ${num(x.elig.length)}</b><small>${x.avg == null ? 'أنجزوا' : 'متوسط ' + num(x.avg) + '٪'}</small></span></summary>
+          <div class="sc-task-body">${x.res.length ? `<ul class="sc-task-list">${x.res.sort((a, b) => (b.r ? 1 : 0) - (a.r ? 1 : 0) || a.p.name.localeCompare(b.p.name, 'ar')).map(y => `<li class="${y.r ? 'ok' : ''}"><span>${y.r ? '✓' : '○'}</span>${esc(y.p.name)}${y.r ? `<b style="color:${color(y.r.pct)}">${num(y.r.pct)}٪</b>` : '<small class="muted">لم يُنجز</small>'}</li>`).join('')}</ul>` : '<p class="muted">لا يوجد طلاب سمح أولياء أمورهم بهذه المادة.</p>'}
+            <button type="button" class="linkish" data-tdel="${esc(t.id)}">حذف الواجب</button></div></details>`; }).join('')}</div>` : ''}
+    </section>`;
+
+    // 3) خريطة إتقان الفصل
+    if (!clsView.mapSid || !subsT.some(s => s.id === clsView.mapSid)) clsView.mapSid = subsT[0] ? subsT[0].id : null;
+    const mapS = NQ.subjectById(clsView.mapSid);
+    let mapCard = '';
+    if (mapS && kids.length) {
+      const L = mapS.units.flatMap(un => un.lessons.map(l => ({ key: un.id + '/' + l.id, l, un })));
+      const who = list.filter(x => allowedSubs(x.p).some(s => s.id === mapS.id)).sort((a, b) => a.p.name.localeCompare(b.p.name, 'ar'));
+      const best = new Map(who.map(x => [x.p, NQ.subjectStats(mapS, x.p.records || []).best]));
+      const colAvg = L.map(x => { const v = who.map(w => best.get(w.p)[x.key]).filter(v => v != null); return { n: v.length, a: v.length ? Math.round(v.reduce((s, y) => s + y, 0) / v.length) : null }; });
+      const weakL = L.map((x, i) => ({ x, ...colAvg[i] })).filter(y => y.n >= 2 && y.a < 65).sort((a, b) => a.a - b.a).slice(0, 3);
+      const cell = v => v == null ? '<td class="mm-0"></td>' : `<td class="${v >= 80 ? 'mm-3' : v >= 65 ? 'mm-2' : 'mm-1'}" title="${num(v)}٪">${num(v)}</td>`;
+      mapCard = `<section class="card"><div class="pg-row"><h2>🗺️ خريطة إتقان الفصل</h2>${subsT.length > 1 ? `<select id="cl-map" aria-label="المادة">${subsT.map(s => `<option value="${s.id}" ${s.id === mapS.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select>` : `<small class="muted">${esc(mapS.name)}</small>`}</div>
+        ${weakL.length ? `<p class="sc-weakl">⚠️ دروس تحتاج إعادة شرح للفصل: ${weakL.map(y => `<b>${esc(y.x.l.short)}</b> (${num(y.a)}٪)`).join('، ')}</p>` : ''}
+        ${who.length ? `<div class="table-wrap mm-wrap"><table class="mm"><thead><tr><th class="mm-name">الطالب</th>${L.map((x, i) => `<th title="${esc(x.l.name)}"><span>${esc(x.l.short)}</span><small style="color:${color(colAvg[i].a)}">${colAvg[i].a == null ? '' : num(colAvg[i].a) + '٪'}</small></th>`).join('')}</tr></thead>
+          <tbody>${who.map(w => `<tr><th class="mm-name">${esc(w.p.name)}</th>${L.map(x => cell(best.get(w.p)[x.key])).join('')}</tr>`).join('')}</tbody></table></div>
+          <div class="sp-legend"><span><i class="mm-3"></i>80٪+</span><span><i class="mm-2"></i>65–79٪</span><span><i class="mm-1"></i>أقل من 65٪</span><span><i class="mm-0"></i>لم يُحل</span></div>` : '<p class="muted">لا يوجد طلاب سمح أولياء أمورهم بهذه المادة.</p>'}
+      </section>`;
+    }
+
+    // 4) أكثر الأسئلة خطأً + ورقة عمل
     const miss = {};
     kids.forEach(p => (p.records || []).filter(r => r.date > now - 30 * DAY && r.ans).forEach(r => r.ans.forEach(([id, , sc]) => { const m = miss[id] = miss[id] || { n: 0, w: 0 }; m.n++; if (sc < 1) m.w++; })));
     const qmap = {}; NQ.SUBJECTS.filter(s => s.grade === c.grade).forEach(s => NQ.allQuestions(s).forEach(q => { qmap[q.id] = { q, s }; }));
-    const hard = Object.entries(miss).filter(([id, m]) => qmap[id] && m.n >= 2 && m.w > 0).sort((a, b) => b[1].w / b[1].n - a[1].w / a[1].n || b[1].w - a[1].w).slice(0, 8);
-    const color = v => v == null ? 'var(--muted)' : NQ.gradeOf(v).c;
-    const ago = r => { if (!r) return 'لم يبدأ'; const d = Math.floor((new Date().setHours(0, 0, 0, 0) - new Date(r.date).setHours(0, 0, 0, 0)) / DAY); return d <= 0 ? 'اليوم' : d === 1 ? 'أمس' : `منذ ${num(d)} أيام`; };
-    app.innerHTML = page(`📚 ${esc(c.grade)} · ${esc(c.section)} · ${esc(subjLabel(c))}`, `${esc(c.schoolName || '')} · ${num(kids.length)} طالب · ${c.open ? 'الانضمام مفتوح' : 'الانضمام مغلق'}${c.title ? ' · ' + esc(c.title) : ''}`, `
+    const hardAll = Object.entries(miss).filter(([id, m]) => qmap[id] && m.n >= 2 && m.w > 0).sort((a, b) => b[1].w / b[1].n - a[1].w / a[1].n || b[1].w - a[1].w);
+    const hard = hardAll.slice(0, 8);
+
+    // 5) أبطال الأسبوع + رسالة للفصل
+    const heroes = list.filter(x => x.k.xp > 0).sort((a, b) => b.k.xp - a.k.xp).slice(0, 5);
+    const msg = c.msg && c.msg.text ? c.msg : null;
+    const heroCard = `<section class="pg-grid2">
+      <div class="card"><h2>🏆 أبطال الفصل هذا الأسبوع</h2>${heroes.length ? `<ol class="sc-heroes">${heroes.map((x, i) => `<li><span>${['🥇', '🥈', '🥉', '٤', '٥'][i]}</span><b>${esc(x.p.name)}</b><small>${num(x.k.xp)} نقطة · ${testsN(x.k.w)}</small></li>`).join('')}</ol>
+        <button type="button" class="btn ghost small" id="cl-cheer">🎉 هنّئهم برسالة للفصل</button>` : '<p class="empty">لا توجد نقاط هذا الأسبوع بعد.</p>'}</div>
+      <div class="card"><h2>📣 رسالة للفصل</h2><small class="muted">تظهر لكل طلاب الفصل أعلى صفحتهم (مرة واحدة لكل رسالة)</small>
+        ${msg ? `<div class="px-sent"><p>«${esc(msg.text)}»</p><small>أُرسلت ${NQ.fmtDate(msg.t)}</small></div>` : ''}
+        <form class="px-form" id="cl-msg"><label class="wide"><span class="sr">نص الرسالة</span><textarea id="cl-mt" maxlength="160" rows="2" placeholder="مثال: لا تنسوا مراجعة الوحدة الأولى قبل اختبار الأحد 📚" required></textarea></label><button class="btn" type="submit">إرسال</button></form></div>
+    </section>`;
+
+    // 6) جدول الطلاب (ترتيب + بحث + تصفية)
+    const COLS = [['name', 'الطالب'], ['last', 'آخر نشاط'], ['q', 'أسئلة الأسبوع'], ['avg', 'متوسط الأسبوع'], ['lvl', 'المستوى العام'], ['need', 'يحتاج متابعة']];
+    const sortVal = (x, k) => k === 'name' ? x.p.name : k === 'last' ? (x.k.last ? x.k.last.date : 0) : k === 'need' ? (x.k.need ? x.k.weak.st.level : 999) : x.k[k] == null ? -1 : x.k[k];
+    const tbody = () => {
+      const q = clsView.q.trim();
+      const rowsF = list.filter(x => (!q || x.p.name.includes(q)) && (!clsView.need || x.k.need || !x.k.w))
+        .sort((a, b) => { const va = sortVal(a, clsView.sort), vb = sortVal(b, clsView.sort); return (typeof va === 'string' ? va.localeCompare(vb, 'ar') : va - vb) * clsView.dir; });
+      return rowsF.map(({ p, k }) => `<tr><td><b>${esc(p.name)}</b><small class="sc-allowed">${esc(allowedSubs(p).map(s => s.name).join('، ') || 'لا توجد مواد مسموحة')}</small></td><td>${ago(k.last)}</td><td>${num(k.q)}</td><td style="color:${color(k.avg)};font-weight:800">${k.avg == null ? '—' : num(k.avg) + '٪'}</td><td style="color:${color(k.lvl)};font-weight:800">${k.lvl == null ? '—' : num(k.lvl) + '٪'}</td><td>${k.need ? esc(k.weak.s.name) : '—'}</td><td><button type="button" class="btn ghost small" data-stu="${esc(p._doc)}">التقرير</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted">لا يوجد طلاب مطابقون.</td></tr>';
+    };
+    const thead = () => COLS.map(([k, t]) => `<th aria-sort="${clsView.sort === k ? (clsView.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" class="sc-sort" data-sort="${k}">${t}${clsView.sort === k ? (clsView.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`).join('') + '<th></th>';
+
+    app.innerHTML = page(`📚 ${esc(c.grade)} · ${esc(c.section)} · ${esc(subjLabel(c))}`, `${esc(c.schoolName || '')} · ${kidsN(kids.length)} · ${c.open ? 'الانضمام مفتوح' : 'الانضمام مغلق'}${c.title ? ' · ' + esc(c.title) : ''}`, `
+      ${summary}
       <form class="card px-form sc-subj-form" id="cl-subf"><label><span>مادة هذا الفصل (تظهر لأولياء الأمور، ويُقترح عليهم مشاركة درجاتها)</span><select id="cl-sub"><option value="">— اختر —</option>${subjectOpts(c.subject)}</select></label><button class="btn ghost" type="submit">حفظ</button></form>
-      <section class="card"><div class="pg-row"><h2>الطلاب</h2><div class="db-btns"><button type="button" class="btn small" id="cl-inv">+ دعوة أولياء الأمور</button><button type="button" class="btn ghost small" id="cl-open">${c.open ? 'إغلاق الانضمام' : 'فتح الانضمام'}</button></div></div>
-        ${list.length ? `<div class="table-wrap"><table class="px-table sc-table"><thead><tr><th>الطالب</th><th>آخر نشاط</th><th>أسئلة الأسبوع</th><th>متوسط الأسبوع</th><th>المستوى العام</th><th>يحتاج متابعة</th><th></th></tr></thead><tbody>
-          ${list.map(({ p, k }) => `<tr><td><b>${esc(p.name)}</b><small class="sc-allowed">${esc(allowedSubs(p).map(s => s.name).join('، ') || 'لا توجد مواد مسموحة')}</small></td><td>${ago(k.last)}</td><td>${num(k.q)}</td><td style="color:${color(k.avg)};font-weight:800">${k.avg == null ? '—' : num(k.avg) + '٪'}</td><td style="color:${color(k.lvl)};font-weight:800">${k.lvl == null ? '—' : num(k.lvl) + '٪'}</td><td>${k.weak && k.weak.st.level < 65 ? esc(k.weak.s.name) : '—'}</td><td><button type="button" class="btn ghost small" data-stu="${esc(p._doc)}">التقرير</button></td></tr>`).join('')}
-        </tbody></table></div>` : '<p class="empty">لم ينضم أي طالب بعد. أرسل رابط الدعوة لجروب أولياء الأمور.</p>'}</section>
-      ${hard.length ? `<section class="card"><h2>أكثر الأسئلة خطأً في الفصل (آخر 30 يوماً)</h2><ul class="pg-list">${hard.map(([id, m]) => `<li><span class="dot" style="background:var(--bad)"></span><div><b>${esc(qmap[id].q.q)}</b><small>${qmap[id].s.icon} ${esc(qmap[id].s.name)} · الصحيح: ${esc(NQ.correctText(qmap[id].q))}</small></div><span class="pct" style="color:var(--bad)">${num(Math.round(m.w / m.n * 100))}٪ خطأ</span></li>`).join('')}</ul></section>` : ''}
+      <section class="card"><div class="pg-row"><h2>الطلاب</h2><div class="db-btns"><button type="button" class="btn small" id="cl-inv">+ دعوة أولياء الأمور</button><button type="button" class="btn ghost small" id="cl-csv" ${kids.length ? '' : 'disabled'}>⬇ تصدير Excel</button><button type="button" class="btn ghost small" id="cl-open">${c.open ? 'إغلاق الانضمام' : 'فتح الانضمام'}</button></div></div>
+        ${list.length ? `<div class="sc-tools"><label class="sr" for="cl-q">بحث بالاسم</label><input id="cl-q" type="search" placeholder="🔎 بحث بالاسم" value="${esc(clsView.q)}"><label class="gm-check"><input type="checkbox" id="cl-need" ${clsView.need ? 'checked' : ''}> يحتاجون متابعة أو غير نشطين فقط</label></div>
+          <div class="table-wrap"><table class="px-table sc-table"><thead><tr id="cl-th">${thead()}</tr></thead><tbody id="cl-tb">${tbody()}</tbody></table></div>` : '<p class="empty">لم ينضم أي طالب بعد. أرسل رابط الدعوة لجروب أولياء الأمور.</p>'}</section>
+      ${tasksCard}
+      ${mapCard}
+      ${heroCard}
+      ${hard.length ? `<section class="card"><div class="pg-row"><h2>أكثر الأسئلة خطأً في الفصل (آخر 30 يوماً)</h2><button type="button" class="btn ghost small" id="cl-ws">🖨️ ورقة عمل للفصل</button></div><ul class="pg-list">${hard.map(([id, m]) => `<li><span class="dot" style="background:var(--bad)"></span><div><b>${esc(qmap[id].q.q)}</b><small>${qmap[id].s.icon} ${esc(qmap[id].s.name)} · الصحيح: ${esc(NQ.correctText(qmap[id].q))}</small></div><span class="pct" style="color:var(--bad)">${num(Math.round(m.w / m.n * 100))}٪ خطأ</span></li>`).join('')}</ul></section>` : ''}
       <section class="pr-danger"><span class="muted">حذف الفصل يزيل قائمة طلابه من المنصة (لا تتأثر درجاتهم عند أسرهم).</span><button type="button" class="btn danger small" id="cl-del">حذف الفصل</button></section>`,
       '<a class="btn ghost small" href="#staff">→ كل الفصول</a>');
+
+    const save = async (patch, ok) => { try { await db.set('classes/' + cid, Object.assign({}, stripId(c), patch)); if (ok) N().toast(ok); renderClass(cid); } catch (x) { N().toast(errTxt(x)); } };
+    const bindRows = () => app.querySelectorAll('[data-stu]').forEach(b => b.onclick = () => { const p = kids.find(x => x._doc === b.dataset.stu); if (p) renderStudent(c, p); });
+    const redrawTable = () => { const th = document.getElementById('cl-th'), tb = document.getElementById('cl-tb'); if (!tb) return; th.innerHTML = thead(); tb.innerHTML = tbody(); bindSort(); bindRows(); };
+    const bindSort = () => app.querySelectorAll('[data-sort]').forEach(b => b.onclick = () => { const k = b.dataset.sort; clsView.dir = clsView.sort === k ? -clsView.dir : (k === 'name' ? 1 : -1); clsView.sort = k; redrawTable(); });
+    bindSort(); bindRows();
+    const qi = document.getElementById('cl-q'); if (qi) qi.oninput = () => { clsView.q = qi.value; redrawTable(); };
+    const nd = document.getElementById('cl-need'); if (nd) nd.onchange = () => { clsView.need = nd.checked; redrawTable(); };
     document.getElementById('cl-inv').onclick = () => shareWindow({ title: 'دعوة أولياء الأمور', url: siteUrl('class-' + cid), text: `دعوة لانضمام أبنائكم إلى فصل ${c.grade} / ${c.section} – ${c.schoolName} في منصة قِمّة. افتح الرابط وأدخل رقم ولي الأمر:`, note: 'ولي الأمر يقبل الدعوة لأبنائه من لوحته. يمكنك إغلاق الانضمام بعد اكتمال الفصل.' });
-    document.getElementById('cl-subf').onsubmit = async e => {
-      e.preventDefault(); const v = document.getElementById('cl-sub').value; if (!v) return N().toast('اختر المادة');
-      try { await db.set('classes/' + cid, Object.assign({}, stripId(c), { subject: v })); N().toast('تم حفظ المادة ✓'); renderClass(cid); } catch (x) { N().toast(errTxt(x)); }
-    };
-    document.getElementById('cl-open').onclick = async () => { try { await db.set('classes/' + cid, Object.assign({}, stripId(c), { open: !c.open })); renderClass(cid); } catch (e) { N().toast(errTxt(e)); } };
+    document.getElementById('cl-subf').onsubmit = e => { e.preventDefault(); const v = document.getElementById('cl-sub').value; if (!v) return N().toast('اختر المادة'); save({ subject: v }, 'تم حفظ المادة ✓'); };
+    document.getElementById('cl-open').onclick = () => save({ open: !c.open });
     document.getElementById('cl-del').onclick = async () => {
       if (!(await N().ask('حذف الفصل نهائياً؟', 'حذف', true))) return;
       try { for (const p of kids) await db.del('classes/' + cid + '/students/' + p._doc); await db.del('classes/' + cid); N().go('#staff'); } catch (e) { N().toast(errTxt(e)); }
     };
-    app.querySelectorAll('[data-stu]').forEach(b => b.onclick = () => { const p = kids.find(x => x._doc === b.dataset.stu); if (p) renderStudent(c, p); });
+    // تذكير لجروب أولياء الأمور (بدون أسماء الطلاب)
+    const rm = document.getElementById('cl-remind');
+    if (rm) rm.onclick = () => copyText(`تذكير من ${c.teacherName || 'معلم الفصل'} – فصل ${c.grade} / ${c.section}:\nبعض الطلاب لم يذاكروا على منصة قِمّة منذ أسبوع. نرجو تشجيع أبنائكم على حل اختبار قصير يومياً (١٠ دقائق تكفي) 🌟\n${siteUrl('home')}`, 'تم نسخ رسالة التذكير ✓ الصقها في جروب أولياء الأمور');
+    // تصدير Excel (CSV بترميز يقرؤه Excel بالعربية)
+    const csvB = document.getElementById('cl-csv');
+    if (csvB) csvB.onclick = () => {
+      const cell = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+      const subsAll = teachSubs(c);
+      const head = ['الطالب', 'آخر نشاط', 'اختبارات الأسبوع', 'أسئلة الأسبوع', 'متوسط الأسبوع %', 'المستوى العام %', 'يحتاج متابعة في', ...subsAll.map(s => s.name + ' %')];
+      const body = list.slice().sort((a, b) => a.p.name.localeCompare(b.p.name, 'ar')).map(({ p, k }) => [p.name, k.last ? new Date(k.last.date).toLocaleDateString('en-CA') : '', k.w, k.q, k.avg == null ? '' : k.avg, k.lvl == null ? '' : k.lvl, k.need ? k.weak.s.name : '',
+        ...subsAll.map(s => allowedSubs(p).some(x => x.id === s.id) ? (NQ.subjectStats(s, p.records || []).level == null ? '' : NQ.subjectStats(s, p.records || []).level) : 'غير مسموح')]);
+      const csv = '﻿' + [head, ...body].map(r => r.map(cell).join(',')).join('\r\n');
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      a.download = `فصل-${c.grade}-${c.section}-${ymd()}.csv`.replace(/\s+/g, '-'); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      N().toast('تم تنزيل ملف الفصل ✓ يفتح في Excel');
+    };
+    // واجبات الفصل
+    const ts = document.getElementById('cl-ts'), tk = document.getElementById('cl-tk');
+    const fillK = () => { const s = NQ.subjectById(ts.value); tk.innerHTML = s ? s.units.map(un => `<optgroup label="${esc(un.name)}">${un.lessons.map(l => `<option value="${un.id}/${l.id}">${esc(l.short)}: ${esc(l.name)}</option>`).join('')}<option value="${un.id}/exam">★ الاختبار الشامل للوحدة</option></optgroup>`).join('') : ''; };
+    if (ts) { ts.onchange = fillK; fillK(); }
+    const tf = document.getElementById('cl-tadd');
+    if (tf) tf.onsubmit = e => {
+      e.preventDefault(); const s = NQ.subjectById(ts.value), key = tk.value; if (!s || !key) return;
+      const list0 = Array.isArray(c.tasks) ? c.tasks : [];
+      if (list0.some(t => t.sid === s.id && t.key === key && (!t.due || t.due >= ymd()))) return N().toast('هذا الواجب مُرسل للفصل بالفعل');
+      const t = { id: rid(10), sid: s.id, key, title: keyTitle(s, key) || key, due: document.getElementById('cl-td').value || null, created: Date.now() };
+      save({ tasks: list0.concat(t).slice(-30) }, 'تم إرسال الواجب للفصل ✓');
+    };
+    app.querySelectorAll('[data-tdel]').forEach(b => b.onclick = async () => { if (!(await N().ask('حذف هذا الواجب من الفصل؟', 'حذف', true))) return; save({ tasks: (c.tasks || []).filter(t => t.id !== b.dataset.tdel) }, 'تم حذف الواجب'); });
+    // خريطة الإتقان: تغيير المادة
+    const mp = document.getElementById('cl-map'); if (mp) mp.onchange = () => { clsView.mapSid = mp.value; renderClass(cid); };
+    // رسالة للفصل وتهنئة الأبطال
+    const mf = document.getElementById('cl-msg');
+    if (mf) mf.onsubmit = e => { e.preventDefault(); const t = document.getElementById('cl-mt').value.trim().slice(0, 160); if (t) save({ msg: { text: t, t: Date.now() } }, 'تم إرسال الرسالة للفصل ✓'); };
+    const ch = document.getElementById('cl-cheer');
+    if (ch) ch.onclick = () => save({ msg: { text: `🏆 أبطال الأسبوع في فصلنا: ${heroes.map(x => first(x.p.name)).join('، ')}. أحسنتم! وأنتظر أسماء جديدة الأسبوع القادم 🌟`.slice(0, 160), t: Date.now() } }, 'تم إرسال التهنئة للفصل ✓');
+    // ورقة عمل من أكثر الأسئلة خطأً
+    const wsb = document.getElementById('cl-ws');
+    if (wsb) wsb.onclick = () => {
+      const pool = hardAll.slice(0, 20).map(([id]) => qmap[id].q);
+      const s0 = qmap[hardAll[0][0]].s, one = hardAll.slice(0, 20).every(([id]) => qmap[id].s.id === s0.id);
+      NQ.printWorksheet(one ? s0 : { name: subjLabel(c), grade: c.grade }, 'أكثر الأسئلة خطأً في الفصل', pool, { name: '' });
+    };
   }
   const stripId = o => { const x = Object.assign({}, o); delete x.id; return x; };
   // المواد التي سمح بها ولي الأمر لهذا المعلم (البيانات تصل مفلترة أصلاً، وهذا للعرض)
@@ -538,10 +702,52 @@
   }
   // دمج عضويات الفصول بين أجهزة الأسرة: الأحدث لكل فصل يفوز
   function merge(t, src) {
+    if (src.classSeen) { t.classSeen = t.classSeen || {}; Object.entries(src.classSeen).forEach(([k, v]) => { if (!(t.classSeen[k] >= v)) t.classSeen[k] = v; }); }
     const a = mems(t), b = mems(src); if (!b.length) return;
     const by = new Map(a.map(m => [m.cid, m]));
     b.forEach(m => { const cur = by.get(m.cid); if (!cur || (m.t || 0) > (cur.t || 0)) by.set(m.cid, m); });
     t.classes = [...by.values()];
+  }
+
+  /* ================= صفحة الطالب: واجبات ورسائل معلميه ================= */
+  // نسخة محفوظة على الجهاز من واجبات ورسائل كل فصل (تُحدَّث كل 10 دقائق على الأكثر)
+  const KEY_CC = 'nq_class_cache';
+  const ccGet = () => { try { return JSON.parse(localStorage.getItem(KEY_CC) || '{}') || {}; } catch (e) { return {}; } };
+  let ccBusy = false;
+  async function refreshClassFeed(p, onChange) {
+    if (!enabled() || ccBusy || !p) return;
+    const cc = ccGet(), now = Date.now(), due = activeMems(p).filter(m => !cc[m.cid] || now - cc[m.cid].at > 10 * 60000);
+    if (!due.length) return;
+    ccBusy = true; let changed = false;
+    try {
+      for (const m of due) {
+        let c = null; try { c = await db.get('classes/' + m.cid); } catch (e) { continue; }
+        const v = { at: now, teacher: (c && c.teacherName) || m.teacher || '', tasks: c && Array.isArray(c.tasks) ? c.tasks : [], msg: c && c.msg ? c.msg : null };
+        const old = cc[m.cid]; if (!old || JSON.stringify([old.tasks, old.msg]) !== JSON.stringify([v.tasks, v.msg])) changed = true;
+        cc[m.cid] = v;
+      }
+      try { localStorage.setItem(KEY_CC, JSON.stringify(cc)); } catch (e) { }
+    } finally { ccBusy = false; }
+    if (changed && onChange) onChange();
+  }
+  function classTasks(p) {
+    const cc = ccGet();
+    return activeMems(p).flatMap(m => { const v = cc[m.cid] || {}; return (v.tasks || []).map(t => ({ t, teacher: v.teacher || m.teacher || '', cid: m.cid })); })
+      .filter(x => x.t && x.t.sid && x.t.key && Date.now() - (x.t.created || 0) < 30 * DAY);
+  }
+  function studentHtml(p) {
+    if (!enabled() || !p) return '';
+    const cc = ccGet(), seen = p.classSeen || {};
+    return activeMems(p).map(m => {
+      const v = cc[m.cid], g = v && v.msg;
+      if (!g || !g.text || g.t <= (seen[m.cid] || 0) || Date.now() - g.t > 14 * DAY) return '';
+      return `<section class="px-msg sc-cmsg" role="status"><span class="px-msg-ic" aria-hidden="true">📣</span><div><small>رسالة من ${esc(v.teacher || 'معلمك')}</small><p>${esc(g.text)}</p></div><button type="button" class="btn small" data-cmsg="${esc(m.cid)}|${g.t}">تم 👍</button></section>`;
+    }).join('');
+  }
+  function bindStudent(p) {
+    if (!enabled() || !p) return;
+    N().app.querySelectorAll('[data-cmsg]').forEach(b => b.onclick = () => { const [cid, t] = b.dataset.cmsg.split('|'); p.classSeen = Object.assign({}, p.classSeen, { [cid]: +t }); N().persist(); N().route(); });
+    refreshClassFeed(p, () => { if (/^#?(home)?$/.test(location.hash)) N().route(); });
   }
 
   /* ================= التوجيه ================= */
@@ -555,5 +761,5 @@
     return false;
   }
 
-  window.NQSchools = { enabled, route, parentHtml, bindParent, onPersist, merge, primary, stageOf, REGIONS, STAGES, ALL_GRADES, _db: db };
+  window.NQSchools = { enabled, route, parentHtml, bindParent, onPersist, merge, primary, stageOf, classTasks, studentHtml, bindStudent, REGIONS, STAGES, ALL_GRADES, _db: db };
 })();

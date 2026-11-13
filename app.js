@@ -1213,6 +1213,13 @@
         if (st.done && !isToday(st.rec ? st.rec.date : t.doneAt)) return;
         items.push({ ic: '📌', t: t.title, sub: `واجب من ولي أمرك · ${s.name}${st.done ? '' : ' · ' + X.dueTxt(t.due)}`, done: st.done, late: !st.done && st.late, act: `data-task="${esc(t.id)}"` });
       });
+      // واجبات المعلمين (من فصول الطالب)
+      if (window.NQSchools && window.NQSchools.classTasks) window.NQSchools.classTasks(p).forEach(({ t, teacher }) => {
+        const s = subjectById(t.sid); if (!s || s.grade !== p.grade) return;
+        const st = X.taskStatus(p, t);
+        if (st.done && !isToday(st.rec ? st.rec.date : 0)) return;
+        items.push({ ic: '🏫', t: t.title, sub: `واجب من ${teacher || 'معلمك'} · ${s.name}${st.done ? '' : ' · ' + X.dueTxt(t.due)}`, done: st.done, late: !st.done && st.late, act: `data-ctask="${s.id}|${esc(t.key)}"` });
+      });
       X.upcoming(p).forEach(e => { const pl = X.examPlan(p, e); if (!pl) return; pl.today.slice(0, 3).forEach(x => items.push({ ic: '📅', t: x.lesson.name.includes(x.lesson.short) ? x.lesson.name : x.lesson.short + ': ' + x.lesson.name, sub: `خطة امتحان ${pl.s.name}`, done: false, act: `data-plan="${pl.s.id}|${x.key}"` })); });
     }
     const due = srsDue(p), n = due.subs.reduce((a, x) => a + x.ids.length, 0);
@@ -1287,6 +1294,7 @@
         <div class="db-btns"><button type="button" class="btn warn" data-quick>⚡ تدرّب ٥ دقائق</button><a class="btn" href="#subjects">ابدأ اختباراً جديداً</a></div>
       </header>
       ${window.NQP ? window.NQP.homeHtml(p, 'top') : ''}
+      ${window.NQSchools && window.NQSchools.studentHtml ? window.NQSchools.studentHtml(p) : ''}
       ${streakWarn(rec)}
       ${planCard(p)}
       <section class="pg-grid2">
@@ -1341,6 +1349,8 @@
     if (window.NQP) window.NQP.bindHome(p);
     bindSrs(p);
     $app.querySelectorAll('[data-quick]').forEach(b => b.onclick = quickPractice);
+    $app.querySelectorAll('[data-ctask]').forEach(b => b.onclick = () => { const [sid, key] = b.dataset.ctask.split('|'); const s = subjectById(sid); if (s) openStart(s, key); });
+    if (window.NQSchools && window.NQSchools.bindStudent) window.NQSchools.bindStudent(p);
     refreshSync();
   }
 
