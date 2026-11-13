@@ -251,7 +251,10 @@
     async list(force) {
       const withMine = remote => {
         const mine = localEntries(), ids = new Set(Object.keys(mine));
-        return remote.filter(e => e && typeof e === 'object' && e.pid && !ids.has(e.pid)).concat(Object.values(mine));
+        // الطالب نفسه قد يصل من أكثر من جهاز (ربط العائلة): نبقي نسخته الأكثر نقاطاً فقط
+        const one = new Map();
+        remote.filter(e => e && typeof e === 'object' && e.pid && !ids.has(e.pid)).forEach(e => { const o = one.get(e.pid); if (!o || (e.xp || 0) > (o.xp || 0)) one.set(e.pid, e); });
+        return [...one.values()].concat(Object.values(mine));
       };
       if (!force && this.remote && Date.now() - this.cacheAt < 15000) return (this.cache = withMine(this.remote));
       let out = [];

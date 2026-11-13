@@ -1,5 +1,5 @@
 /* يجعل الموقع يعمل بدون إنترنت ويفتح بسرعة. غيّر VERSION عند كل نشر ليحصل الجميع على النسخة الجديدة. */
-const VERSION = 'nq-20261114a';
+const VERSION = 'nq-20261114b';
 const SHELL = ['./', './index.html', './style.css', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
