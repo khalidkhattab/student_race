@@ -1801,9 +1801,10 @@
   }
 
   /* ---------- طباعة ورقة العمل (Worksheet) ---------- */
-  function renderPrintWorksheet(s, title, pool) {
+  // who: الطالب صاحب الورقة (من لوحة ولي الأمر)، وإلا الطالب الحالي
+  function renderPrintWorksheet(s, title, pool, who) {
     if (!pool || !pool.length) return;
-    const p = cur();
+    const p = who || cur();
     const ov = document.createElement('div');
     ov.className = 'overlay ws-print';
     // الخيارات في بنك الأسئلة تبدأ بالإجابة الصحيحة، فنخلطها في الورقة (صح/خطأ يبقى بترتيبه)
@@ -2221,7 +2222,7 @@
   // واجهة مكشوفة لملف المنافسة
   window.NQ = {
     store, cur, persist, SUBJECTS, GRADES, allQuestions, subjectById, gradeOf, esc, toast, ask, go, route,
-    startQuiz, openStart, records, respText, correctText, qImg, hashPin, avatarHtml, AVATARS, fmtDate, fmtTime, shuffle, newId, subjectStats, streakDays, validPin, weakPin, digitsOnly, pinInput,
+    startQuiz, openStart, printWorksheet: renderPrintWorksheet, records, respText, correctText, qImg, hashPin, avatarHtml, AVATARS, fmtDate, fmtTime, shuffle, newId, subjectStats, streakDays, validPin, weakPin, digitsOnly, pinInput,
     joinFamily, familyJoinDialog, syncNow: () => initCloud(), get cloudKind() { return cloudKind; }, get synced() { return !!cloud; },
     get grade() { return curGrade; }, renderHome: () => renderHome(), app: $app,
     openPomodoro, startFlashcards, renderPrintWorksheet, NQSound, NQTheme

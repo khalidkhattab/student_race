@@ -709,6 +709,8 @@
       return;
     }
     const people = Object.values(st.profiles).filter(p => p.grade);
+    // وقت الزيارة السابقة يُحفظ مرة واحدة في كل جلسة (لشريط «ما الجديد»)
+    if (parentSince == null) { parentSince = st.parent.lastSeen || 0; st.parent.lastSeen = Date.now(); NQ.persist(); }
     if (parentKid && !st.profiles[parentKid]) parentKid = null;
     if (parentKid) return renderParentKid(st.profiles[parentKid], people);
     renderParentHome(people);
@@ -742,7 +744,7 @@
   }
   function bindParentHeader() {
     const NQ = N(), st = NQ.store;
-    document.getElementById('pout').onclick = () => { setParentUnlocked(false); parentKid = null; NQ.go('#login'); };
+    document.getElementById('pout').onclick = () => { setParentUnlocked(false); parentKid = null; parentSince = null; newHidden = false; NQ.go('#login'); };
     document.getElementById('pchg').onclick = async () => {
       if (!(await NQ.ask('تغيير رقم ولي الأمر؟ ستختار رقماً جديداً الآن.', 'تغيير'))) return;
       st.parent = null; setParentUnlocked(false); NQ.persist(); renderParent();
@@ -750,7 +752,8 @@
   }
 
   /* ----- 1) نظرة على الأسرة ----- */
-  let parentKid = null;
+  let parentKid = null, parentSince = null, newHidden = false, parentTab = 'overview';
+  const PTABS = [['overview', '📊 نظرة عامة'], ['tasks', '📌 الواجبات والامتحانات'], ['tests', '📝 الاختبارات'], ['cheer', '💌 التشجيع والمكافآت'], ['settings', '⚙️ الإعدادات']];
   function renderParentHome(people) {
     const NQ = N(), app = NQ.app;
     const sums = people.map(p => ({ p, k: kidSummary(p) }));
@@ -766,6 +769,8 @@
     const hour = new Date().getHours();
     app.innerHTML = `<section class="pr-page">
       ${parentHeader({ title: 'هذا الأسبوع في البيت', line: `${hour < 12 ? 'صباح الخير' : 'مساء الخير'} · ${num(people.length)} ${people.length === 1 ? 'طالب' : 'أبناء'} · ${num(tot.n)} اختباراً · ${num(tot.q)} سؤالاً · ${num(Math.round(tot.s / 60))} دقيقة مذاكرة في آخر 7 أيام` })}
+      ${window.NQP && !newHidden ? window.NQP.whatsNewHtml(people, parentSince) : ''}
+      ${window.NQP ? window.NQP.guideHtml(people) : ''}
       ${window.NQSchools ? window.NQSchools.parentHtml(people) : ''}
       ${alerts.length ? `<section class="pr-alerts" aria-label="تنبيهات">${alerts.slice(0, 6).map(a => `<div class="pr-alert ${a.cls}"><div><b>${a.t}</b><small>${a.s}</small></div>
         ${a.give ? `<button type="button" class="btn small" data-give="${a.give}">سلّمتها ✓</button>` : `<button type="button" class="btn ghost small" data-kid="${a.pid}">عرض</button>`}</div>`).join('')}</section>` : ''}
@@ -791,8 +796,10 @@
     </section>`;
     bindParentHeader();
     if (window.NQP) window.NQP.bindFamily();
+    if (window.NQP) window.NQP.bindGuide(people, (id, tab) => { parentKid = id; parentTab = tab || 'overview'; renderParent(); window.scrollTo(0, 0); }, () => renderParent());
+    const nx = document.getElementById('px-new-x'); if (nx) nx.onclick = () => { newHidden = true; renderParent(); };
     if (window.NQSchools) window.NQSchools.bindParent(people, () => renderParent());
-    app.querySelectorAll('[data-kid]').forEach(b => b.onclick = () => { parentKid = b.dataset.kid; renderParent(); window.scrollTo(0, 0); });
+    app.querySelectorAll('[data-kid]').forEach(b => b.onclick = () => { parentKid = b.dataset.kid; parentTab = 'overview'; renderParent(); window.scrollTo(0, 0); });
     app.querySelectorAll('[data-give]').forEach(b => b.onclick = () => {
       const [pid, rid] = b.dataset.give.split('|'), r = (NQ.store.profiles[pid].rewards || []).find(x => x.id === rid);
       if (r) { r.given = Date.now(); NQ.persist(); NQ.toast('تم تسجيل تسليم المكافأة ✓'); renderParent(); }
@@ -811,6 +818,7 @@
     const mins = Math.round(k.secs / 60);
     const lastTxt = k.last ? (k.idle === 0 ? 'اليوم' : k.idle === 1 ? 'أمس' : `منذ ${num(k.idle)} أيام`) : '—';
     const fn = esc(firstName(p.name));
+    const XP = X ? X.kidHtml(p, parentPeriod) : {};
     const kidLink = q => `<button type="button" class="sb-a${q.id === p.id ? ' on' : ''}" ${q.id === p.id ? 'aria-current="page"' : ''} data-kid="${q.id}">${NQ.avatarHtml(q, false)}<span>${esc(firstName(q.name))}<small>${esc(q.grade)}</small></span></button>`;
     app.innerHTML = `<div class="shell pr-shell">
       <nav class="sb" aria-label="الأبناء">
@@ -823,7 +831,7 @@
       <div class="shell-main">
         <header class="pg-head">
           <div class="pr-who">${NQ.avatarHtml(p, true)}<div><h1>${esc(p.name)}</h1><p class="sub">${esc(p.grade)} · ${L.icon} ${esc(L.name)} · ${num(k.xp)} نقطة · ${lg.icon} ${esc(lg.name)}</p></div></div>
-          <div class="pr-hbtns">${X ? '<button type="button" class="btn small" data-px-report>📄 التقرير الأسبوعي</button>' : ''}<div class="segs" role="group" aria-label="الفترة"><button type="button" class="seg${parentPeriod === 7 ? ' on' : ''}" aria-pressed="${parentPeriod === 7}" data-per="7">آخر 7 أيام</button><button type="button" class="seg${parentPeriod === 30 ? ' on' : ''}" aria-pressed="${parentPeriod === 30}" data-per="30">آخر 30 يوماً</button></div></div>
+          <div class="pr-hbtns">${X ? '<button type="button" class="btn small" data-px-report>📄 التقرير الأسبوعي</button><button type="button" class="btn ghost small" id="px-msheet">🖨️ ورقة الأخطاء</button>' : ''}<div class="segs" role="group" aria-label="الفترة"><button type="button" class="seg${parentPeriod === 7 ? ' on' : ''}" aria-pressed="${parentPeriod === 7}" data-per="7">آخر 7 أيام</button><button type="button" class="seg${parentPeriod === 30 ? ' on' : ''}" aria-pressed="${parentPeriod === 30}" data-per="30">آخر 30 يوماً</button></div></div>
         </header>
         <section class="pg-tiles">
           <div class="card pg-tile"><small>متوسط الدرجات</small><b>${k.avg == null ? '—' : num(k.avg) + '٪'}</b><small class="note">${trendTxt(k.delta)}</small></div>
@@ -831,6 +839,8 @@
           <div class="card pg-tile"><small>وقت المذاكرة</small><b>${mins >= 60 ? num(Math.floor(mins / 60)) + ' س ' + num(mins % 60) + ' د' : num(mins) + ' د'}</b><small class="note muted">متوسط ${num(Math.round(mins / parentPeriod))} د يومياً</small></div>
           <div class="card pg-tile"><small>آخر نشاط</small><b>${lastTxt}</b><small class="note muted">${k.last ? esc((NQ.subjectById(k.last.subjectId) || { name: k.last.kind === 'daily' ? 'تحدي اليوم' : 'تحدي صديق' }).name) : 'لم يبدأ بعد'}</small></div>
         </section>
+        <div class="px-tabs" role="tablist" aria-label="أقسام تقرير ${fn}">${PTABS.map(([id, t]) => `<button type="button" role="tab" id="pt-${id}" aria-controls="pp-${id}" aria-selected="${parentTab === id}" class="${parentTab === id ? 'on' : ''}" data-ptab="${id}">${t}</button>`).join('')}</div>
+        <div class="px-panel" role="tabpanel" id="pp-overview" aria-labelledby="pt-overview" ${parentTab === 'overview' ? '' : 'hidden'}>
         <section class="pg-grid2">
           <div class="card">
             <h2>الأسئلة يومياً</h2><p class="muted" style="margin:0 0 12px">الخط المتقطع = الهدف اليومي (${num(k.goal)} سؤالاً)</p>
@@ -851,6 +861,19 @@
             ${weak.length ? `<div class="pr-weak">${weak.map(w => `<div class="${w.pct < 55 ? 'bad' : 'mid'}"><div><b>${esc(w.name)}</b><small>${esc(w.s.name)} · ${esc(w.unit.name.split(':')[0])} · ${num(tries(w.key))} ${tries(w.key) === 1 ? 'محاولة' : 'محاولات'}</small></div><b>${num(w.pct)}٪</b></div>`).join('')}</div>`
               : `<p class="empty">${p.records.length ? 'كل الدروس المحلولة درجتها 65٪ أو أكثر 🎉' : 'ستظهر هنا الدروس الضعيفة بعد أول اختبار.'}</p>`}
           </div>
+          ${XP.compare || ''}
+        </section>
+        ${XP.badges || ''}
+        </div>
+        <div class="px-panel" role="tabpanel" id="pp-tasks" aria-labelledby="pt-tasks" ${parentTab === 'tasks' ? '' : 'hidden'}>
+          ${XP.tasks || ''}${XP.exams || ''}
+        </div>
+        <div class="px-panel" role="tabpanel" id="pp-tests" aria-labelledby="pt-tests" ${parentTab === 'tests' ? '' : 'hidden'}>
+          ${XP.recent || ''}
+        </div>
+        <div class="px-panel" role="tabpanel" id="pp-cheer" aria-labelledby="pt-cheer" ${parentTab === 'cheer' ? '' : 'hidden'}>
+        <section class="pg-grid2">
+          ${XP.msg || ''}
           <div class="card pr-goals">
             <h2>الأهداف والمكافآت</h2>
             <div><small class="muted"><b>الهدف اليومي</b> (25 نقطة إضافية في كل يوم يتحقق فيه)</small>
@@ -859,20 +882,31 @@
               <div class="db-bar"><i style="width:${pc}%;background:${r.done ? 'var(--ok)' : 'var(--accent)'}"></i></div></div>`; }).join('') || '<p class="hint" style="margin:0">لا توجد مكافآت بعد. أضف مكافأة تُمنح عند الوصول لعدد من النقاط.</p>'}
             <form class="pr-rw-add" id="radd"><label class="sr" for="rwt">المكافأة</label><input id="rwt" placeholder="مكافأة جديدة (مثال: نزهة)" maxlength="60" required>
               <label class="sr" for="rwx">النقاط المطلوبة</label><input id="rwx" type="number" min="50" step="50" value="${Math.ceil((k.xp + 300) / 100) * 100}" required><button class="btn" type="submit">إضافة</button></form>
-            <label class="gm-check"><input type="checkbox" id="pshow" ${p.hidden ? '' : 'checked'}> يظهر في لوحة الشرف (الاسم الأول والصورة فقط)</label>
           </div>
         </section>
-        ${X ? X.kidHtml(p, parentPeriod) : ''}
+        </div>
+        <div class="px-panel" role="tabpanel" id="pp-settings" aria-labelledby="pt-settings" ${parentTab === 'settings' ? '' : 'hidden'}>
+        <section class="pg-grid2">
+          ${XP.time || ''}
+          <div class="card px-card"><h2>🏆 لوحة الشرف</h2>
+            <label class="gm-check"><input type="checkbox" id="pshow" ${p.hidden ? '' : 'checked'}> يظهر في لوحة الشرف (الاسم الأول والصورة فقط)</label></div>
+        </section>
         <section class="pr-danger">
           <span class="muted">نُسي الرقم السري لـ ${fn}؟ أعد تعيينه ويُختار رقم جديد عند الدخول التالي. الدرجات تبقى كما هي.</span>
           <div class="db-btns"><button type="button" class="btn ghost small" id="preset">إعادة تعيين الرقم السري</button><button type="button" class="btn danger small" id="pdel">حذف الطالب</button></div>
         </section>
         <div class="db-btns"><button type="button" class="btn ghost small" id="pchg">تغيير رقم ولي الأمر</button><button type="button" class="btn ghost small" id="pout">خروج ولي الأمر</button></div>
+        </div>
       </div>
     </div>`;
     bindParentHeader();
     const rerender = () => renderParent();
-    app.querySelectorAll('[data-kid]').forEach(b => b.onclick = () => { parentKid = b.dataset.kid || null; if (X) X.view = null; rerender(); window.scrollTo(0, 0); });
+    // التبويبات: تبديل الظاهر فقط (بدون إعادة رسم) مع التنقل بالأسهم
+    const tabs = [...app.querySelectorAll('[data-ptab]')];
+    const pick = (b, focus) => { parentTab = b.dataset.ptab; tabs.forEach(t => { const on = t === b; t.classList.toggle('on', on); t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1; const pn = document.getElementById('pp-' + t.dataset.ptab); if (pn) pn.hidden = !on; }); if (focus) b.focus(); };
+    tabs.forEach((b, i) => { b.tabIndex = b.classList.contains('on') ? 0 : -1; b.onclick = () => pick(b); b.onkeydown = e => { const d = e.key === 'ArrowLeft' ? 1 : e.key === 'ArrowRight' ? -1 : 0; if (d) { e.preventDefault(); pick(tabs[(i + d + tabs.length) % tabs.length], true); } }; });
+    const ms = document.getElementById('px-msheet'); if (ms && X) ms.onclick = () => X.mistakesSheet(p);
+    app.querySelectorAll('[data-kid]').forEach(b => b.onclick = () => { parentKid = b.dataset.kid || null; if (X) X.view = null; parentTab = 'overview'; rerender(); window.scrollTo(0, 0); });
     if (X) X.bindKid(p, rerender);
     app.querySelectorAll('[data-per]').forEach(b => b.onclick = () => { parentPeriod = +b.dataset.per; rerender(); });
     app.querySelectorAll('[data-goal]').forEach(b => b.onclick = () => { p.goal = +b.dataset.goal; NQ.persist(); NQ.toast('تم تحديث الهدف ✓'); rerender(); });
@@ -939,5 +973,5 @@
     });
   }
 
-  window.NQGame = { init, route, xpFor, afterResult, resultExtras, homeExtras, unitBadge, mergeProfile, onPersist: () => scheduleSync(), backend: Backend, _levelOf: levelOf, _totalXp: totalXp, _leagueOf: leagueOf, _xpIn: xpIn, _weekKey: () => weekKey(), _goalOf: goalOf, _answeredOn: answeredOn, _today: today, renderAchievements };
+  window.NQGame = { init, route, xpFor, afterResult, resultExtras, homeExtras, unitBadge, mergeProfile, onPersist: () => scheduleSync(), backend: Backend, _levelOf: levelOf, _totalXp: totalXp, _leagueOf: leagueOf, _xpIn: xpIn, _weekKey: () => weekKey(), _goalOf: goalOf, _answeredOn: answeredOn, _badges: () => BADGES, _today: today, renderAchievements };
 })();

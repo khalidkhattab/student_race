@@ -1356,3 +1356,49 @@ h1{font-weight:900}h2{font-weight:800}
 .px-emo{width:40px;height:40px;border:0;border-radius:10px;background:var(--card);font-size:1.3rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .px-emo:hover{transform:scale(1.12);box-shadow:0 2px 8px rgba(0,0,0,.08)}
 @media (max-width:600px){.px-emo-row small{width:100%}.px-emo{width:38px;height:38px}}
+
+/* ===== لوحة ولي الأمر: التبويبات، الجديد، خطوات البداية، الأوسمة، الواجبات المتكررة ===== */
+.px-tabs{display:flex;flex-wrap:wrap;gap:4px;padding:5px;margin:4px 0 14px;border-radius:14px;background:var(--chip);scrollbar-width:none}
+.px-tabs::-webkit-scrollbar{display:none}
+.px-tabs button{flex:1 0 auto;min-height:44px;padding:0 14px;border:0;border-radius:10px;background:none;color:var(--muted);font:inherit;font-weight:700;white-space:nowrap;cursor:pointer;transition:background-color .2s ease,color .2s ease}
+.px-tabs button:hover:not(.on){color:var(--ink)}
+.px-tabs button.on{background:var(--card);color:var(--brand);box-shadow:var(--shadow)}
+.px-panel{display:flex;flex-direction:column;gap:16px;animation:lpFadeUp .25s ease-out both}
+.px-panel[hidden]{display:none}
+.px-new{border:1.5px solid var(--brand);background:var(--brand-soft)}
+.px-new h2 small{font-size:.85rem;font-weight:600}
+.px-new-list{margin:6px 0 0;padding:0 18px 0 0;display:flex;flex-direction:column;gap:6px;line-height:1.7}
+.px-new-list .linkish{font-weight:800}
+.px-guide .db-bar{margin:6px 0 10px}
+.px-guide-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.px-guide-list li{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--line);border-radius:14px}
+.px-guide-list li.ok{opacity:.65}
+.px-guide-list li div{flex:1;min-width:0;display:flex;flex-direction:column}
+.px-guide-list small{color:var(--muted);font-size:.82rem}
+.px-g-n{flex:none;width:34px;height:34px;border-radius:50%;background:var(--chip);color:var(--brand);font-weight:800;display:flex;align-items:center;justify-content:center}
+.px-guide-list li.ok .px-g-n{background:var(--ok);color:#fff}
+.px-badges{display:flex;flex-direction:column;gap:8px}
+.px-badge{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:14px;background:var(--chip)}
+.px-badge>span{font-size:1.8rem;flex:none}
+.px-badge div{flex:1;min-width:0;display:flex;flex-direction:column}
+.px-badge small{color:var(--muted)}
+.px-routines{margin-top:12px;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.px-rt{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:var(--brand-soft);color:var(--ink);font-size:.88rem;font-weight:700}
+.px-sibs{border:1.5px dashed var(--line);border-radius:12px;padding:6px 12px;display:flex;flex-wrap:wrap;gap:4px 16px}
+.px-sibs legend{padding:0 6px;color:var(--muted);font-size:.85rem;font-weight:700}
+.px-form label[hidden]{display:none}
+.px-msg .px-react{flex:none;display:flex;gap:6px}
+.px-react-b{width:46px;height:46px;border-radius:50%;border:1.5px solid var(--line);background:var(--card);font-size:1.35rem;cursor:pointer;transition:transform .15s ease,border-color .2s ease}
+.px-react-b:hover{transform:scale(1.12);border-color:var(--brand)}
+.px-react-b:active{transform:scale(.95)}
+.px-re{font-size:1.15rem}
+.px-ms-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px}
+@media (max-width:600px){
+  .px-tabs{margin-inline:-4px;flex-wrap:nowrap;overflow-x:auto}
+  .px-tabs button{padding:0 12px;font-size:.9rem}
+  .px-msg .px-react{width:100%;justify-content:center}
+}
+@media (prefers-reduced-motion: reduce){ .px-panel{animation:none} }
+.px-sibs{flex:1 1 100%;margin:0}
+.px-form .px-sibs label.gm-check{flex:none;flex-direction:row;align-items:center;min-height:40px;font-size:.95rem;color:var(--ink)}
+.px-form .px-sibs input{width:20px;height:20px;min-height:0;padding:0}

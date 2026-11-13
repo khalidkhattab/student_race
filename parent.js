@@ -34,6 +34,22 @@
     const d = daysTo(due);
     return d < 0 ? -d === 1 ? 'متأخر يوماً' : -d === 2 ? 'متأخر يومين' : `متأخر ${num(-d)} أيام` : d === 0 ? 'آخر موعد اليوم' : d === 1 ? 'آخر موعد غداً' : d === 2 ? 'آخر موعد بعد يومين' : `آخر موعد بعد ${num(d)} أيام`;
   }
+  // الواجبات المتكررة: كل أسبوع في يوم محدد يُنشأ واجب جديد بمعرّف ثابت (حتى لا يتكرر عند المزامنة بين الأجهزة)
+  const DOWS = ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت']; // تُستخدم بعد «كل»
+  const lastOcc = dow => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() - dow + 7) % 7)); return d; };
+  function runRoutines(p) {
+    let added = false;
+    (p.routines || []).filter(r => !r.off).forEach(r => {
+      const d = lastOcc(r.dow), id = r.id + '-' + ymd(d);
+      if (d.getTime() < new Date(r.created).setHours(0, 0, 0, 0)) return;
+      p.tasks = p.tasks || [];
+      if (p.tasks.some(t => t.id === id) || !N().subjectById(r.sid)) return;
+      p.tasks.push({ id, rid: r.id, sid: r.sid, key: r.key, title: r.title, due: ymd(d), created: d.getTime() });
+      added = true;
+    });
+    if (added && p.tasks.length > 60) p.tasks = p.tasks.slice(-60);
+    return added;
+  }
   const openTasks = p => (p.tasks || []).map(t => ({ t, s: N().subjectById(t.sid), st: taskStatus(p, t) }))
     .filter(x => x.s && !x.st.done).sort((a, b) => (a.t.due || '9') < (b.t.due || '9') ? -1 : 1);
 
@@ -97,11 +113,14 @@
   const upcoming = p => (p.exams || []).filter(e => daysTo(e.date) >= 0).sort((a, b) => a.date < b.date ? -1 : 1);
 
   /* ================= صفحة الطالب ================= */
+  const REACTS = ['❤️', '👍', '😊', '🙏'];
   function homeHtml(p, part) {
     let h = '';
     if (part !== 'bottom') {
+    if (runRoutines(p)) N().persist();
     if (p.msg && p.msg.text && !p.msg.seen) h += `<section class="px-msg" role="status"><span class="px-msg-ic" aria-hidden="true">💌</span>
-      <div><small>رسالة من ولي أمرك</small><p>${esc(p.msg.text)}</p></div><button type="button" class="btn small" id="px-seen">شكراً ❤️</button></section>`;
+      <div><small>رسالة من ولي أمرك</small><p>${esc(p.msg.text)}</p></div>
+      <div class="px-react" role="group" aria-label="ردّ على الرسالة">${REACTS.map(e => `<button type="button" class="px-react-b" data-react="${e}" aria-label="ردّ بـ ${e}">${e}</button>`).join('')}</div></section>`;
     const b = blocked(p); if (b) h += `<div class="px-lock" role="note">⏰ ${esc(b)}</div>`;
     }
     if (part === 'top') return h;
@@ -122,8 +141,7 @@
   function bindHome(p) {
     const NQ = N(), app = NQ.app;
     startCd();
-    const seen = document.getElementById('px-seen');
-    if (seen) seen.onclick = () => { p.msg.seen = Date.now(); NQ.persist(); NQ.route(); };
+    app.querySelectorAll('[data-react]').forEach(b => b.onclick = () => { p.msg.seen = Date.now(); p.msg.re = b.dataset.react; NQ.persist(); NQ.toast('وصل ردّك لولي أمرك ' + b.dataset.react); NQ.route(); });
     app.querySelectorAll('[data-task]').forEach(b => b.onclick = () => {
       const t = (p.tasks || []).find(x => x.id === b.dataset.task); if (!t) return;
       const s = NQ.subjectById(t.sid); if (!s) return;
@@ -143,6 +161,82 @@
     });
     upcoming(p).filter(e => daysTo(e.date) <= 3).forEach(e => { const s = N().subjectById(e.sid); if (s) out.push({ cls: 'mid', t: `${fn}: امتحان ${esc(s.name)} ${daysTo(e.date) === 0 ? 'اليوم' : `بعد ${num(daysTo(e.date))} ${daysTo(e.date) === 1 ? 'يوم' : 'أيام'}`}`, s: fdate(e.date), pid: p.id }); });
     return out;
+  }
+
+  /* ================= لوحة ولي الأمر: ما الجديد منذ آخر زيارة ================= */
+  function sinceTxt(t) {
+    const m = Math.round((Date.now() - t) / 60000);
+    if (m < 60) return `منذ ${num(Math.max(1, m))} دقيقة`;
+    const h = Math.round(m / 60); if (h < 24) return h === 1 ? 'منذ ساعة' : h === 2 ? 'منذ ساعتين' : `منذ ${num(h)} ساعات`;
+    const d = Math.round(h / 24); return d === 1 ? 'منذ أمس' : d === 2 ? 'منذ يومين' : `منذ ${num(d)} أيام`;
+  }
+  function whatsNewHtml(people, since) {
+    if (!since) return '';
+    const G = Gm(), BL = G && G._badges ? G._badges() : [];
+    const rows = people.map(p => {
+      const bits = [], rs = p.records.filter(r => r.date > since);
+      if (rs.length) bits.push(`حلّ ${num(rs.length)} ${rs.length === 1 ? 'اختباراً' : 'اختبارات'} بمتوسط ${num(avgOf(rs))}٪`);
+      const done = (p.tasks || []).filter(t => { const st = taskStatus(p, t); return st.done && ((st.rec && st.rec.date > since) || (t.doneAt && t.doneAt > since)); });
+      if (done.length) bits.push(done.length === 1 ? `أنهى واجب «${esc(done[0].title)}»` : `أنهى ${num(done.length)} واجبات`);
+      if (p.msg && p.msg.seen > since) bits.push(`قرأ رسالتك ✓${p.msg.re ? ' وردّ ' + esc(p.msg.re) : ''}`);
+      const nb = BL.filter(b => p.badges && p.badges[b.id] > since);
+      if (nb.length) bits.push(`حصل على ${nb.length === 1 ? 'وسام' : num(nb.length) + ' أوسمة'} ${nb.map(b => b.icon).join('')}`);
+      return bits.length ? `<li><button type="button" class="linkish" data-kid="${esc(p.id)}">${esc(firstName(p.name))}</button>: ${bits.join('، ')}</li>` : '';
+    }).filter(Boolean);
+    return `<section class="card px-new" aria-label="الجديد منذ آخر زيارة"><div class="pg-row"><h2>🆕 منذ زيارتك الأخيرة <small class="muted">${sinceTxt(since)}</small></h2><button type="button" class="px-icon-btn" id="px-new-x" aria-label="إخفاء">×</button></div>
+      ${rows.length ? `<ul class="px-new-list">${rows.join('')}</ul>` : '<p class="muted" style="margin:0">لا جديد منذ زيارتك الأخيرة. ربما يحتاج أبناؤك تذكيراً لطيفاً 🙂</p>'}</section>`;
+  }
+
+  /* ================= لوحة ولي الأمر: خطوات البداية ================= */
+  function guideSteps(people) {
+    const par = N().store.parent || {};
+    return [
+      { id: 'kids', t: 'أضف أبناءك', s: 'كل طالب يسجّل من شاشة الدخول', ok: people.length > 0, go: '#login' },
+      { id: 'goal', t: 'حدّد الهدف اليومي', s: 'عدد الأسئلة المطلوب كل يوم', ok: people.some(p => p.goal), kid: true },
+      { id: 'exam', t: 'أضف موعد امتحان', s: 'يظهر للطالب عدّاد وخطة مراجعة', ok: people.some(p => (p.exams || []).length), kid: true },
+      { id: 'fam', t: 'اربط أجهزة العائلة', s: 'لتتابع من جوالك ما يحله ابنك على جهازه', ok: !!par.famDone || !(window.NQFamily && window.NQFamily.enabled()), fam: true }
+    ];
+  }
+  function guideHtml(people) {
+    const par = N().store.parent || {};
+    if (par.guideOff) return '';
+    const S = guideSteps(people), n = S.filter(x => x.ok).length;
+    if (n === S.length) return '';
+    return `<section class="card px-guide" aria-label="خطوات البداية"><div class="pg-row"><h2>🚀 ابدأ في ٤ خطوات <small class="muted">${num(n)} من ${num(S.length)}</small></h2><button type="button" class="linkish" id="px-guide-x">إخفاء</button></div>
+      <div class="db-bar"><i style="width:${Math.round(n / S.length * 100)}%;background:var(--ok)"></i></div>
+      <ol class="px-guide-list">${S.map((x, i) => `<li class="${x.ok ? 'ok' : ''}"><span class="px-g-n" aria-hidden="true">${x.ok ? '✓' : num(i + 1)}</span><div><b>${x.t}</b><small>${x.s}</small></div>${x.ok ? '<span class="sr">تم</span>' : `<button type="button" class="btn ghost small" data-guide="${x.id}">ابدأ</button>`}</li>`).join('')}</ol></section>`;
+  }
+  function bindGuide(people, openKid, rerender) {
+    const NQ = N(), app = NQ.app;
+    const x = document.getElementById('px-guide-x');
+    if (x) x.onclick = () => { NQ.store.parent.guideOff = Date.now(); NQ.persist(); rerender(); };
+    app.querySelectorAll('[data-guide]').forEach(b => b.onclick = () => {
+      const st = guideSteps(people).find(s => s.id === b.dataset.guide); if (!st) return;
+      if (st.go) NQ.go(st.go);
+      else if (st.fam) openLinkWindow();
+      else if (people[0]) openKid(people[0].id, st.id === 'exam' ? 'tasks' : 'cheer');
+    });
+  }
+
+  /* ================= ورقة مراجعة الأخطاء للطباعة ================= */
+  function mistakesSheet(p) {
+    const NQ = N();
+    const subs = NQ.SUBJECTS.filter(s => s.grade === p.grade).map(s => ({ s, ids: new Set(p.wrong[s.id] || []) })).filter(x => x.ids.size);
+    if (!subs.length) { NQ.toast('لا توجد أخطاء محفوظة لـ ' + firstName(p.name) + ' 🎉'); return; }
+    const print = x => {
+      const pool = NQ.allQuestions(x.s).filter(q => x.ids.has(q.id)).slice(0, 30);
+      if (!pool.length) { NQ.toast('لا توجد أسئلة متاحة لهذه المادة'); return; }
+      NQ.printWorksheet(x.s, 'مراجعة الأخطاء', pool, p);
+    };
+    if (subs.length === 1) return print(subs[0]);
+    const ov = document.createElement('div'); ov.className = 'overlay';
+    ov.innerHTML = `<div class="card" role="dialog" aria-modal="true" aria-labelledby="pxms-t" style="max-width:420px"><h2 id="pxms-t">🖨️ ورقة مراجعة الأخطاء</h2>
+      <p class="muted" style="margin:0 0 10px">اختر المادة. الورقة فيها الأسئلة التي أخطأ فيها ${esc(firstName(p.name))} مع نموذج الإجابات.</p>
+      <div class="px-ms-list">${subs.map((x, i) => `<button type="button" class="px-choice" data-ms="${i}"><b>${x.s.icon} ${esc(x.s.name)}</b><small>${(n => `${num(n)} ${n > 2 && n < 11 ? 'أسئلة' : n > 10 ? 'سؤالاً' : 'سؤال'}`)(Math.min(30, x.ids.size))}</small></button>`).join('')}</div>
+      <div class="actions"><button type="button" class="btn ghost" data-x>إلغاء</button></div></div>`;
+    ov.onclick = e => { if (e.target === ov || e.target.closest('[data-x]')) ov.remove(); };
+    ov.querySelectorAll('[data-ms]').forEach(b => b.onclick = () => { ov.remove(); print(subs[+b.dataset.ms]); });
+    document.body.appendChild(ov); ov.querySelector('[data-ms]').focus();
   }
 
   /* ================= 4) المقارنة ================= */
@@ -201,6 +295,7 @@
   const MSGS = ['أحسنت! أنا فخور بك 🌟', 'استمر، أنت تتحسن كل يوم 💪', 'لا تستسلم، المحاولة القادمة أفضل ❤️', 'أنهِ واجبك اليوم وتنتظرك مفاجأة 🎁'];
   function kidHtml(p, period) {
     const NQ = N(), subs = NQ.SUBJECTS.filter(s => s.grade === p.grade);
+    if (runRoutines(p)) NQ.persist();
     const tasks = (p.tasks || []).map(t => ({ t, s: NQ.subjectById(t.sid), st: taskStatus(p, t) })).filter(x => x.s).sort((a, b) => b.t.created - a.t.created);
     const cmp = compare(p, period);
     const maxW = 100;
@@ -209,22 +304,29 @@
     const recent = p.records.slice().sort((a, b) => b.date - a.date).slice(0, 12);
     const exams = (p.exams || []).slice().sort((a, b) => a.date < b.date ? -1 : 1);
     const sOpts = subs.map(s => `<option value="${s.id}">${s.icon} ${esc(s.name)}</option>`).join('');
-    return `
-      <section class="pg-grid2">
+    // إخوة في نفس الصف يمكن إرسال الواجب نفسه لهم (المواد تختلف من صف لآخر)
+    const sibs = Object.values(NQ.store.profiles).filter(q => q.id !== p.id && q.grade === p.grade);
+    const routines = (p.routines || []).filter(r => !r.off);
+    const parts = {};
+    parts.tasks = `
         <div class="card px-card">
           <h2>📌 الواجبات</h2>
           <form class="px-form" id="px-tadd">
             <label><span>المادة</span><select id="px-ts">${sOpts}</select></label>
             <label class="wide"><span>الواجب</span><select id="px-tk"></select></label>
-            <label><span>آخر موعد</span><input type="date" id="px-td" min="${ymd()}" value="${ymd(new Date(Date.now() + 2 * DAY))}"></label>
+            <label><span>التكرار</span><select id="px-trep"><option value="">مرة واحدة</option>${DOWS.map((d, i) => `<option value="${i}">كل ${d}</option>`).join('')}</select></label>
+            <label id="px-tdw"><span>آخر موعد</span><input type="date" id="px-td" min="${ymd()}" value="${ymd(new Date(Date.now() + 2 * DAY))}"></label>
+            ${sibs.length ? `<fieldset class="wide px-sibs"><legend>أرسله أيضاً إلى</legend>${sibs.map(q => `<label class="gm-check"><input type="checkbox" data-sib="${esc(q.id)}"> ${esc(firstName(q.name))}</label>`).join('')}</fieldset>` : ''}
             <button class="btn" type="submit">إرسال الواجب</button>
           </form>
+          ${routines.length ? `<div class="px-routines"><small class="muted">واجبات متكررة:</small>${routines.map(r => { const s = NQ.subjectById(r.sid); return `<span class="px-rt">🔁 ${esc(r.title)} · ${s ? esc(s.name) + ' · ' : ''}كل ${DOWS[r.dow]} <button type="button" class="linkish" data-rtoff="${esc(r.id)}">إيقاف</button></span>`; }).join('')}</div>` : ''}
           ${tasks.length ? `<ul class="pg-list px-tlist">${tasks.slice(0, 10).map(x => {
             const c = x.st.done ? (x.st.rec ? lvlColor(x.st.rec.pct) : 'var(--ok)') : x.st.late ? 'var(--bad)' : 'var(--accent)';
             return `<li><span class="dot" style="background:${c}"></span><div><b>${esc(x.t.title)}</b><small>${x.s.icon} ${esc(x.s.name)} · ${x.st.done ? (x.st.rec ? `تم ${x.st.late ? 'بعد الموعد' : 'في الموعد'} · ${NQ.fmtDate(x.st.rec.date).split('،')[0]}` : 'تم') : dueTxt(x.t.due)}</small></div>
               ${x.st.rec ? `<button type="button" class="pct linkish" style="color:${c}" data-rec="${x.st.rec.id}">${num(x.st.rec.pct)}٪</button>` : x.st.done ? '<span class="pct" style="color:var(--ok)">✓</span>' : `<button type="button" class="linkish" data-tdel="${esc(x.t.id)}">إلغاء</button>`}</li>`;
           }).join('')}</ul>` : '<p class="hint" style="margin:8px 0 0">لا توجد واجبات بعد. اختر درساً، أو «مراجعة الأخطاء» ليحل الطالب الأسئلة التي أخطأ فيها من قبل.</p>'}
-        </div>
+        </div>`;
+    parts.compare = `
         <div class="card px-card">
           <div class="pg-row"><h2>📊 مقارنة بالفترة السابقة</h2><small class="muted">آخر ${num(period)} يوماً مقابل ${num(period)} قبلها</small></div>
           ${cmp.rows.length ? `<table class="px-table"><thead><tr><th>المادة</th><th>قبل</th><th>الآن</th><th>التغيّر</th></tr></thead><tbody>
@@ -235,15 +337,15 @@
             ${cmp.weeks.map(w => `<div class="col"><small>${w.avg == null ? '' : num(w.avg)}</small><i style="height:${w.avg == null ? 2 : Math.max(4, Math.round(w.avg / maxW * 100))}%;background:${w.avg == null ? 'var(--track)' : lvlColor(w.avg)}"></i></div>`).join('')}
           </div>
           <div class="pg-chart-x">${cmp.weeks.map(w => `<small>${w.label}</small>`).join('')}</div>
-        </div>
-      </section>
+        </div>`;
+    parts.recent = `
       <section class="card px-card">
         <div class="pg-row"><h2>📝 آخر الاختبارات</h2><small class="muted">اضغط على أي اختبار لرؤية كل سؤال وإجابة الطالب</small></div>
         ${recent.length ? `<ul class="pg-list">${recent.map(r => `<li><span class="dot" style="background:${lvlColor(r.pct)}"></span>
           <div><b>${esc(r.title)}</b><small>${esc(subjName(r))} · ${r.mode === 'exam' ? 'اختبار' : 'تدريب'} · ${NQ.fmtDate(r.date)}</small></div>
           <span class="pct" style="color:${lvlColor(r.pct)}">${num(r.pct)}٪</span><button type="button" class="btn ghost small" data-rec="${r.id}">التفاصيل</button></li>`).join('')}</ul>` : '<p class="empty">لم يحل أي اختبار بعد.</p>'}
-      </section>
-      <section class="pg-grid2">
+      </section>`;
+    parts.time = `
         <div class="card px-card">
           <h2>⏰ وقت المذاكرة</h2>
           <small class="muted">متى يذاكر؟ (عدد الأسئلة في آخر 30 يوماً)</small>
@@ -255,16 +357,17 @@
             <button class="btn" type="submit">حفظ</button>
           </form>
           ${blocked(p) ? `<p class="px-lock sm">الآن: ${esc(blocked(p))}</p>` : ''}
-        </div>
+        </div>`;
+    parts.msg = `
         <div class="card px-card">
           <h2>💌 رسالة تشجيع</h2>
-          <small class="muted">تظهر للطالب أول ما يفتح صفحته</small>
-          ${p.msg && p.msg.text ? `<div class="px-sent"><p>«${esc(p.msg.text)}»</p><small>${p.msg.seen ? `قرأها ✓ · ${NQ.fmtDate(p.msg.seen)}` : `أُرسلت ${NQ.fmtDate(p.msg.t)} · لم تُقرأ بعد`}</small></div>` : ''}
+          <small class="muted">تظهر للطالب أول ما يفتح صفحته، ويستطيع الرد عليها بتفاعل</small>
+          ${p.msg && p.msg.text ? `<div class="px-sent"><p>«${esc(p.msg.text)}»</p><small>${p.msg.seen ? `قرأها ✓ · ${NQ.fmtDate(p.msg.seen)}${p.msg.re ? ` · ردّ: <span class="px-re">${esc(p.msg.re)}</span>` : ''}` : `أُرسلت ${NQ.fmtDate(p.msg.t)} · لم تُقرأ بعد`}</small></div>` : ''}
           <div class="px-chips">${MSGS.map((m, i) => `<button type="button" class="chip-b" data-msgq="${i}">${esc(m)}</button>`).join('')}</div>
           <form class="px-form" id="px-msg"><label class="wide"><span class="sr">نص الرسالة</span><textarea id="px-mt" maxlength="140" rows="2" placeholder="اكتب رسالة قصيرة…" required></textarea></label><button class="btn" type="submit">إرسال</button></form>
           <div class="px-emojis" role="group" aria-label="رموز تعبيرية للرسالة">${EMOJIS.map(([g, list]) => `<div class="px-emo-row"><small>${g}</small><div>${list.map(e => `<button type="button" class="px-emo" data-emo="${e}" aria-label="أضف ${e}">${e}</button>`).join('')}</div></div>`).join('')}</div>
-        </div>
-      </section>
+        </div>`;
+    parts.exams = `
       <section class="card px-card">
         <h2>📅 مواعيد الامتحانات</h2>
         <small class="muted">يظهر للطالب عدّاد تنازلي وخطة مراجعة يومية للدروس التي لم يتقنها (أقل من 80٪)</small>
@@ -278,6 +381,16 @@
           <button class="btn" type="submit">إضافة امتحان</button>
         </form>
       </section>`;
+    parts.badges = weekBadgesHtml(p);
+    return parts;
+  }
+  // أوسمة آخر 7 أيام مع زر تهنئة جاهز
+  function weekBadgesHtml(p) {
+    const G = Gm(), list = G && G._badges ? G._badges() : [];
+    const got = list.filter(b => p.badges && p.badges[b.id] > Date.now() - 7 * DAY).sort((a, b) => p.badges[b.id] - p.badges[a.id]);
+    if (!got.length) return '';
+    return `<section class="card px-card"><h2>🎖️ أوسمة هذا الأسبوع</h2><div class="px-badges">${got.map(b => `<div class="px-badge"><span aria-hidden="true">${b.icon}</span><div><b>${esc(b.name)}</b><small>${N().fmtDate(p.badges[b.id]).split('،')[0]}</small></div>
+      <button type="button" class="btn ghost small" data-congrats="${esc(b.id)}">هنّئه 🎉</button></div>`).join('')}</div></section>`;
   }
   function bindKid(p, rerender) {
     const NQ = N(), app = NQ.app;
@@ -291,16 +404,38 @@
     };
     if (ts) { ts.onchange = fillKeys; fillKeys(); }
     const tf = document.getElementById('px-tadd');
+    const rep = document.getElementById('px-trep'), dw = document.getElementById('px-tdw');
+    if (rep) rep.onchange = () => { dw.hidden = rep.value !== ''; };
     if (tf) tf.onsubmit = e => {
       e.preventDefault(); const s = NQ.subjectById(ts.value), key = tk.value; if (!s || !key) return;
       const title = keyTitle(s, key); if (!title) return;
-      p.tasks = p.tasks || [];
-      if (p.tasks.some(t => t.sid === s.id && t.key === key && !taskStatus(p, t).done)) { NQ.toast('هذا الواجب مُرسل بالفعل'); return; }
-      p.tasks.push({ id: NQ.newId(), sid: s.id, key, title, due: document.getElementById('px-td').value || null, created: Date.now() });
-      if (p.tasks.length > 60) p.tasks = p.tasks.slice(-60);
-      NQ.persist(); NQ.toast('تم إرسال الواجب ✓'); rerender();
+      const targets = [p, ...[...app.querySelectorAll('[data-sib]:checked')].map(c => NQ.store.profiles[c.dataset.sib]).filter(Boolean)];
+      const dow = rep && rep.value !== '' ? +rep.value : null, due = document.getElementById('px-td').value || null;
+      let sent = 0;
+      targets.forEach(q => {
+        if (dow != null) {
+          q.routines = q.routines || [];
+          if (q.routines.some(r => !r.off && r.sid === s.id && r.key === key && r.dow === dow)) return;
+          q.routines.push({ id: NQ.newId(), sid: s.id, key, title, dow, created: Date.now() });
+          runRoutines(q); sent++; return;
+        }
+        q.tasks = q.tasks || [];
+        if (q.tasks.some(t => t.sid === s.id && t.key === key && !taskStatus(q, t).done)) return;
+        q.tasks.push({ id: NQ.newId(), sid: s.id, key, title, due, created: Date.now() });
+        if (q.tasks.length > 60) q.tasks = q.tasks.slice(-60);
+        sent++;
+      });
+      if (!sent) { NQ.toast('هذا الواجب مُرسل بالفعل'); return; }
+      NQ.persist(); NQ.toast(dow != null ? `تم ✓ سيصل الواجب كل ${DOWS[dow]}` : sent > 1 ? `تم إرسال الواجب إلى ${num(sent)} أبناء ✓` : 'تم إرسال الواجب ✓'); rerender();
     };
     app.querySelectorAll('[data-tdel]').forEach(b => b.onclick = () => { p.tasks = (p.tasks || []).filter(t => t.id !== b.dataset.tdel); NQ.persist(); rerender(); });
+    // إيقاف الواجب المتكرر (يبقى محفوظاً بعلامة إيقاف حتى لا تعيده مزامنة جهاز آخر)
+    app.querySelectorAll('[data-rtoff]').forEach(b => b.onclick = () => { const r = (p.routines || []).find(x => x.id === b.dataset.rtoff); if (r) { r.off = Date.now(); NQ.persist(); NQ.toast('تم إيقاف الواجب المتكرر'); rerender(); } });
+    app.querySelectorAll('[data-congrats]').forEach(b => b.onclick = () => {
+      const G = Gm(), bd = (G && G._badges ? G._badges() : []).find(x => x.id === b.dataset.congrats); if (!bd) return;
+      p.msg = { text: `مبروك وسام «${bd.name}» ${bd.icon} أنا فخور بك! 🌟`.slice(0, 140), t: Date.now(), seen: null };
+      NQ.persist(); NQ.toast('تم إرسال التهنئة ✓'); rerender();
+    });
     app.querySelectorAll('[data-rec]').forEach(b => b.onclick = () => { const r = p.records.find(x => String(x.id) === b.dataset.rec); if (r) showDetails(r); });
     const lf = document.getElementById('px-lim');
     if (lf) lf.onsubmit = e => {
@@ -401,11 +536,31 @@
         <button type="button" class="btn ghost" id="px-back">→ رجوع للتقرير الكامل</button>
         <span style="flex:1"></span>
         <button type="button" class="btn ghost" id="px-print">🖨️ طباعة / PDF</button>
+        <button type="button" class="btn ghost" id="px-share" hidden>📤 مشاركة</button>
         <button type="button" class="btn" id="px-dl">⬇ تنزيل PDF</button>
       </div>
-      <p class="hint no-print" style="margin:0 0 12px">لإرساله للمدرس: نزّل التقرير كملف PDF ثم أرسله بالواتساب أو البريد.</p>
+      <p class="hint no-print" id="px-rhint" style="margin:0 0 12px">لإرساله للمدرس: نزّل التقرير كملف PDF ثم أرسله بالواتساب أو البريد.</p>
       <style>${REPORT_CSS}</style>${reportInner(p)}
     </section>`;
+    const filename = 'تقرير-' + String(p.name).trim().replace(/\s+/g, '-') + '-' + ymd() + '.pdf';
+    // مشاركة الملف مباشرة (واتساب وغيره) في المتصفحات التي تدعم مشاركة الملفات، ويُجهَّز الملف مسبقاً
+    // لأن المتصفح يشترط أن تبدأ المشاركة مباشرة بعد الضغط
+    const shareBtn = document.getElementById('px-share');
+    let canShare = false;
+    try { canShare = !!(navigator.canShare && navigator.canShare({ files: [new File(['x'], 'a.pdf', { type: 'application/pdf' })] })); } catch (e) { }
+    if (canShare) {
+      shareBtn.hidden = false; document.getElementById('px-rhint').textContent = 'أرسله لوالد الطالب الآخر أو للمدرس بزر «مشاركة» (واتساب، بريد…)، أو نزّله كملف PDF.';
+      let ready = null; const prep = () => ready || (ready = buildPdf(p, filename).catch(e => { ready = null; throw e; }));
+      prep().catch(() => { });
+      shareBtn.onclick = async () => {
+        let blob = null;
+        try { blob = await Promise.race([prep(), new Promise(r => setTimeout(() => r(null), 600))]); } catch (e) { NQ.toast('تعذّر تجهيز الملف للمشاركة'); return; }
+        if (!blob) { shareBtn.textContent = '⏳ جارٍ التجهيز…'; prep().then(() => { shareBtn.textContent = '📤 مشاركة (جاهز)'; }).catch(() => { shareBtn.textContent = '📤 مشاركة'; }); return; }
+        try { await navigator.share({ files: [new File([blob], filename, { type: 'application/pdf' })], title: 'التقرير الأسبوعي: ' + p.name }); }
+        catch (e) { if (e && e.name !== 'AbortError') NQ.toast('تعذّرت المشاركة، نزّل الملف وأرسله'); }
+        shareBtn.textContent = '📤 مشاركة';
+      };
+    }
     document.getElementById('px-back').onclick = () => { api.view = null; back(); window.scrollTo(0, 0); };
     document.getElementById('px-print').onclick = () => {
       document.body.classList.add('px-printing');
@@ -415,28 +570,9 @@
     // تنزيل التقرير كملف PDF (صفحات A4) يُرسم من التقرير الظاهر نفسه
     document.getElementById('px-dl').onclick = async () => {
       const btn = document.getElementById('px-dl'), label = btn.textContent;
-      const filename = 'تقرير-' + String(p.name).trim().replace(/\s+/g, '-') + '-' + ymd() + '.pdf';
       btn.disabled = true; btn.textContent = '⏳ جارٍ تجهيز PDF…';
-      let box = null;
       try {
-        await loadPdfLib();
-        try { await document.fonts.ready; } catch (e) { }
-        // نسخة بعرض صفحة A4 خارج الشاشة حتى يكون الشكل واحداً على الكمبيوتر والموبايل
-        box = document.createElement('div');
-        box.setAttribute('aria-hidden', 'true');
-        box.style.cssText = 'position:absolute;left:0;top:0;z-index:-1;width:760px;background:#fff;direction:rtl';
-        box.innerHTML = `<style>${REPORT_CSS}.rp{max-width:none;border-radius:0;padding:8px 22px 8px 10px}</style>${reportInner(p)}`;
-        document.body.appendChild(box);
-        // الرسم عبر محرك المتصفح نفسه (foreignObject) يحافظ على تشكيل العربية والمسافات؛ وإن لم يدعمه المتصفح نرجع للرسم العادي
-        const make = fo => window.html2pdf().set({
-          margin: [10, 10, 12, 10], filename,
-          image: { type: 'jpeg', quality: 0.95 },
-          html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true, foreignObjectRendering: fo, scrollX: 0, scrollY: 0, x: 0, y: 0, windowWidth: 760 },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-          pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', 'h2', '.rp-kpis', '.rp-days', '.rp-notes'] }
-        }).from(box.querySelector('.rp')).outputPdf('blob');
-        let blob;
-        try { blob = await make(true); } catch (e) { blob = await make(false); }
+        const blob = await buildPdf(p, filename);
         let dl = null;
         if (window.claude && typeof window.claude.use === 'function') { try { dl = await window.claude.use('downloads'); } catch (e) { } }
         if (dl) { try { await dl.save({ filename, data: blob }); NQ.toast('تم حفظ التقرير ✓'); } catch (e) { if (e && e.code !== 'declined') NQ.toast('تعذّر التنزيل هنا'); } return; }
@@ -445,10 +581,31 @@
       } catch (e) {
         NQ.toast('تعذّر تجهيز ملف PDF. استخدم «طباعة / PDF» واختر «حفظ كـ PDF».');
       } finally {
-        if (box) box.remove();
         btn.disabled = false; btn.textContent = label;
       }
     };
+  }
+  // يرسم التقرير كملف PDF (صفحات A4)
+  async function buildPdf(p, filename) {
+    await loadPdfLib();
+    try { await document.fonts.ready; } catch (e) { }
+    // نسخة بعرض صفحة A4 حتى يكون الشكل واحداً على الكمبيوتر والموبايل
+    const box = document.createElement('div');
+    box.setAttribute('aria-hidden', 'true');
+    box.style.cssText = 'position:absolute;left:0;top:0;z-index:-1;width:760px;background:#fff;direction:rtl';
+    box.innerHTML = `<style>${REPORT_CSS}.rp{max-width:none;border-radius:0;padding:8px 22px 8px 10px}</style>${reportInner(p)}`;
+    document.body.appendChild(box);
+    try {
+      // الرسم عبر محرك المتصفح نفسه (foreignObject) يحافظ على تشكيل العربية والمسافات؛ وإن لم يدعمه المتصفح نرجع للرسم العادي
+      const make = fo => window.html2pdf().set({
+        margin: [10, 10, 12, 10], filename,
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true, foreignObjectRendering: fo, scrollX: 0, scrollY: 0, x: 0, y: 0, windowWidth: 760 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', 'h2', '.rp-kpis', '.rp-days', '.rp-notes'] }
+      }).from(box.querySelector('.rp')).outputPdf('blob');
+      try { return await make(true); } catch (e) { return await make(false); }
+    } finally { box.remove(); }
   }
 
   /* ================= حفظ تفاصيل الإجابات + الدمج ================= */
@@ -460,10 +617,11 @@
   function merge(t, src) {
     ['msg', 'limits'].forEach(k => { if (t[k] == null && src[k] != null) t[k] = src[k]; });
     if (src.srs) { t.srs = t.srs || {}; Object.entries(src.srs).forEach(([id, e]) => { const m = t.srs[id]; if (!m || (e && e.d > m.d)) t.srs[id] = e; }); }
-    if (t.msg && src.msg && src.msg.t === t.msg.t && src.msg.seen && !t.msg.seen) t.msg.seen = src.msg.seen;
-    ['tasks', 'exams'].forEach(k => {
+    if (t.msg && src.msg && src.msg.t === t.msg.t && src.msg.seen && !t.msg.seen) { t.msg.seen = src.msg.seen; if (src.msg.re) t.msg.re = src.msg.re; }
+    if (t.msg && src.msg && src.msg.t > t.msg.t) t.msg = src.msg;
+    ['tasks', 'exams', 'routines'].forEach(k => {
       if (!src[k]) return; const have = new Map((t[k] || []).map(x => [x.id, x]));
-      src[k].forEach(x => { const m = have.get(x.id); if (!m) have.set(x.id, x); else if (x.doneAt && !m.doneAt) m.doneAt = x.doneAt; });
+      src[k].forEach(x => { const m = have.get(x.id); if (!m) have.set(x.id, x); else { if (x.doneAt && !m.doneAt) m.doneAt = x.doneAt; if (x.off && !m.off) m.off = x.off; } });
       t[k] = [...have.values()];
     });
   }
@@ -526,7 +684,7 @@
           <div class="px-fam-code"><b dir="ltr">${F.pretty(F.code())}</b><button type="button" class="btn ghost small" data-copycode>نسخ</button></div>
         </details>`);
         bind();
-        ov.querySelectorAll('[data-go]').forEach(b => b.onclick = () => step(b.dataset.go));
+        ov.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { const par = N().store.parent; if (par && !par.famDone) { par.famDone = Date.now(); N().persist(); } step(b.dataset.go); });
         ov.querySelector('[data-copycode]').onclick = () => copyText(F.pretty(F.code()), 'تم نسخ الكود ✓');
       } else if (s === 'near') {
         ov.innerHTML = shell('صوّر هذا الكود', `<div class="px-qr-step"><div class="px-qr-img" id="pxl-qr"><p class="muted">⏳ جارٍ التجهيز…</p></div>
@@ -562,6 +720,6 @@
     const ot = document.getElementById('fam-other'); if (ot) ot.onclick = () => N().familyJoinDialog();
   }
 
-  const api = { view: null, showDetails, familyHtml, bindFamily, homeHtml, bindHome, blocked, alerts, kidHtml, bindKid, renderReport, trimDetails, merge };
+  const api = { view: null, showDetails, familyHtml, bindFamily, homeHtml, bindHome, blocked, alerts, kidHtml, bindKid, renderReport, trimDetails, merge, whatsNewHtml, guideHtml, bindGuide, mistakesSheet };
   window.NQP = api;
 })();
