@@ -31,7 +31,22 @@
   };
   const ROLE_NAMES = [['student', 'الطالب'], ['parent', 'ولي الأمر'], ['teacher', 'المعلم']];
 
+  const FAQ = [
+    ['هل المنصة مجانية؟', 'نعم، كل الاختبارات والمراجعة والتقارير مجانية بالكامل.'],
+    ['هل يحتاج الطالب بريداً إلكترونياً أو حساباً؟', 'لا. يختار الطالب صفه واسمه ويبدأ مباشرة، ويمكن وضع رقم سري قصير لكل طالب إذا كان الجهاز مشتركاً.'],
+    ['أين تُحفظ بيانات أبنائي؟', 'الدرجات تُحفظ على جهازكم. ولا يظهر في لوحة الشرف إلا الاسم الأول والنقاط، ويمكن لولي الأمر إخفاء اسم ابنه منها. وعند ربط أجهزة العائلة تُنسخ الدرجات بين أجهزتكم فقط.'],
+    ['هل يمكن لأكثر من طالب استخدام نفس الجهاز؟', 'نعم، أضف كل الأبناء على نفس الجهاز، ولكل واحد درجاته وتقدّمه المستقل.'],
+    ['ماذا يرى المعلم من بيانات ابني؟', 'لا شيء إلا بعد أن يقبل ولي الأمر دعوة الفصل، وحتى عندها يرى المعلم المواد التي يسمح بها ولي الأمر فقط.'],
+    ['هل تعمل المنصة بدون إنترنت؟', 'بعد فتحها أول مرة يمكن تثبيتها كتطبيق على الجوال، وتعمل الاختبارات حتى مع ضعف الاتصال.']
+  ];
+  // أرقام المنصة من data/catalog.js (يُولَّد من بنك الأسئلة)
+  const getCat = () => {
+    const c = window.NQ_CATALOG || { total: 0, grades: {} }, all = Object.values(c.grades).flat();
+    return { total: c.total, grades: c.grades, gradeNames: Object.keys(c.grades), subjects: all.length, lessons: all.reduce((n, s) => n + s.lessons, 0) };
+  };
+
   window.WELCOME_HTML = function () {
+    const CAT = getCat();
     return `<div class="lp" dir="rtl">
   <header class="lp-head">
     <a href="#welcome" class="lp-brand">${LOGO}<span><b>قِمّة</b><small>تعلَّم. أتقِن. تصدَّر.</small></span></a>
@@ -42,13 +57,14 @@
     </nav>
     <a href="#login" class="lp-login">${ICON.login}تسجيل الدخول</a>
   </header>
+  <div id="lp-back"></div>
 
   <section class="lp-hero">
     <div class="lp-copy">
       <span class="lp-badge"><svg aria-hidden="true" width="22" height="14" viewBox="0 0 30 20"><rect width="30" height="20" rx="3" fill="#fff"/><rect width="30" height="6.7" fill="#007a3d"/><rect y="13.3" width="30" height="6.7" fill="#ce1126"/><path d="M0 0l9 6.7v6.6L0 20z" fill="#10233f"/></svg>المنهج الكويتي <span class="dot">•</span> مجاني</span>
       <h1>رحلتك إلى <span class="hl">القمّة</span><br>تبدأ هنا</h1>
       <p class="lp-lead">راجع دروسك، أتقن أخطاءك، ونافس زملاءك</p>
-      <p class="lp-count"><span></span>أكثر من ٢٬٠٠٠ سؤال للصف السادس والثامن والعاشر<span></span></p>
+      <p class="lp-count"><span></span>أكثر من ${ar(Math.floor(CAT.total / 100) * 100 || 2000)} سؤال للصف السادس والثامن والعاشر<span></span></p>
       <div class="lp-ctas">
         <a href="#login" class="lp-btn primary">${ICON.trophy}ابدأ رحلتك مجاناً</a>
         <a href="#staff" class="lp-btn ghost">${ICON.school}للمعلمين والمدارس</a>
@@ -80,11 +96,46 @@
     <article><svg aria-hidden="true" width="70" height="70" viewBox="0 0 70 70"><rect x="6" y="12" width="58" height="52" rx="10" fill="#fff" stroke="#e85d4a" stroke-width="3"/><rect x="6" y="12" width="58" height="16" rx="8" fill="#e85d4a"/><path d="M20 6v12M50 6v12" stroke="#10233f" stroke-width="3" stroke-linecap="round"/><path d="M16 38h14M36 38h18M16 50h14M36 50h18" stroke="#f4a99e" stroke-width="4" stroke-linecap="round"/></svg><div><h2>هدف الأسبوع</h2><p>خطوات صغيرة لإنجاز أكبر</p><div class="lp-days" role="img" aria-label="٣ من ٥ أيام"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div></div></article>
   </section>
 
+  <section class="lp-stats" aria-label="المنصة بالأرقام">
+    <div><b>${ar(CAT.total)}</b><span>سؤال</span></div>
+    <div><b>${ar(CAT.lessons)}</b><span>درس</span></div>
+    <div><b>${ar(CAT.subjects)}</b><span>مادة</span></div>
+    <div><b>${ar(CAT.gradeNames.length)}</b><span>صفوف</span></div>
+    <div id="lp-st-kids" hidden><b></b><span>طالب نشط</span></div>
+    <div id="lp-st-schools" hidden><b></b><span>مدرسة</span></div>
+  </section>
+
+  <section class="lp-sec lp-how">
+    <h2>كيف تبدأ؟</h2>
+    <ol class="lp-steps">
+      <li><span>١</span><div><b>اختر صفك واسمك</b><small>بدون بريد إلكتروني ولا كلمة مرور</small></div></li>
+      <li><span>٢</span><div><b>حلّ اختبار الدرس</b><small>نتيجة فورية مع شرح الإجابة</small></div></li>
+      <li><span>٣</span><div><b>راجع أخطاءك</b><small>المنصة تعيد عليك ما أخطأت فيه حتى تتقنه</small></div></li>
+    </ol>
+  </section>
+
+  <section class="lp-sec lp-subjects">
+    <h2>المواد المتاحة</h2>
+    <div class="lp-tabs" role="tablist" aria-label="اختر الصف">${CAT.gradeNames.map((g, i) => `<button type="button" role="tab" aria-selected="${i === CAT.gradeNames.length - 1}" class="${i === CAT.gradeNames.length - 1 ? 'on' : ''}" data-sg="${esc(g)}">${esc(g)}</button>`).join('')}</div>
+    <div class="lp-subj-grid" id="lp-subj-grid" role="tabpanel"></div>
+  </section>
+
+  <section class="lp-sec lp-top" id="lp-top" hidden>
+    <h2 id="lp-top-title">أبطال هذا الأسبوع</h2>
+    <ol class="lp-top-list" id="lp-top-list"></ol>
+    <a href="#arena" class="lp-link-btn">لوحة الشرف كاملة ←</a>
+  </section>
+
   <section class="lp-roles">
     <h2>خلف كل قمّة… مَن يدعمك</h2>
     <div class="lp-tabs" role="tablist" aria-label="لمن المنصة">${ROLE_NAMES.map(([id, t], i) => `<button type="button" role="tab" aria-selected="${i === 0}" class="${i === 0 ? 'on' : ''}" data-role="${id}">${t}</button>`).join('')}</div>
     <div class="lp-role-items" id="lp-role-items" role="tabpanel"></div>
-    <p class="lp-any">${ICON.phone}تعلّم من أي جهاز، ويمكن تثبيته كتطبيق على الموبايل</p>
+    <div class="lp-any">${ICON.phone}<span id="lp-inst-txt">تعلّم من أي جهاز، ويمكن تثبيته كتطبيق على الموبايل</span><button type="button" class="lp-btn primary sm" id="lp-inst" hidden>📲 ثبّت التطبيق</button></div>
+  </section>
+
+  <section class="lp-sec lp-faq">
+    <h2>أسئلة شائعة</h2>
+    ${FAQ.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join('')}
   </section>
   <footer class="lp-foot">قِمّة · اختبارات المنهج الكويتي · <a href="#parent">ولي الأمر</a> · <a href="#staff">المعلمون والمدارس</a></footer>
 </div>`;
@@ -166,5 +217,74 @@
       showRole(b.dataset.role);
     });
     showRole('student');
+    welcomeBack(root);
+    subjectsGrid(root);
+    installBtn(root);
+    liveBoard(root);
   };
+
+  // ترحيب بالطالب العائد على نفس الجهاز
+  function welcomeBack(root) {
+    const box = root.querySelector('#lp-back');
+    let st = null; try { st = JSON.parse(lget('nq_students_v2') || 'null'); } catch (e) { }
+    const ps = st && st.profiles ? Object.values(st.profiles).filter(p => p && p.name) : [];
+    if (!ps.length) return;
+    const first = n => String(n).trim().split(/\s+/)[0];
+    const me = ps.find(p => p.id === st.current) || (ps.length === 1 ? ps[0] : null);
+    const names = me ? first(me.name) : ps.slice(0, 3).map(p => first(p.name)).join(' و');
+    const last = me && me.records && me.records.length ? me.records.reduce((a, r) => (r.date || 0) > (a.date || 0) ? r : a) : null;
+    box.innerHTML = `<div class="lp-back"><span class="lp-back-hi">👋</span><div><b>أهلاً ${esc(names)}!</b><small>${last ? 'آخر نشاط: ' + esc(last.title || '') : me ? 'تابِع رحلتك نحو القمّة' : 'اختر من سيذاكر الآن'}</small></div>
+      <a href="${me ? '#home' : '#login'}" class="lp-btn primary sm">${me ? 'تابِع المذاكرة ←' : 'اختر الطالب ←'}</a></div>`;
+  }
+
+  // المواد حسب الصف من data/catalog.js
+  function subjectsGrid(root) {
+    const C = getCat(), grid = root.querySelector('#lp-subj-grid'), tabs = root.querySelectorAll('[data-sg]');
+    if (!C.gradeNames.length) { root.querySelector('.lp-subjects').hidden = true; return; }
+    const show = g => {
+      tabs.forEach(t => { const on = t.dataset.sg === g; t.classList.toggle('on', on); t.setAttribute('aria-selected', String(on)); });
+      grid.innerHTML = (C.grades[g] || []).map(s => `<div class="lp-subj" style="--c:${esc(s.color)}"><span class="ic" aria-hidden="true">${esc(s.icon)}</span><div><b>${esc(s.name)}</b><small>${ar(s.lessons)} درس · ${ar(s.questions)} سؤال</small></div></div>`).join('');
+    };
+    tabs.forEach(t => t.onclick = () => show(t.dataset.sg));
+    const pref = [lget(KEY_G), lget('nq_grade')].find(g => g && C.grades[g]);
+    show(pref || C.gradeNames[C.gradeNames.length - 1]);
+  }
+
+  // زر التثبيت: يظهر عندما يسمح المتصفح، وتعليمات خاصة لأجهزة آيفون
+  function installBtn(root) {
+    const b = root.querySelector('#lp-inst'), txt = root.querySelector('#lp-inst-txt');
+    const standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
+    if (standalone) { txt.textContent = 'أنت تستخدم قِمّة كتطبيق على جهازك ✓'; return; }
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (ios) { txt.textContent = 'ثبّته على آيفون: اضغط زر المشاركة ⬆️ ثم «إضافة إلى الشاشة الرئيسية»'; return; }
+    const ready = () => { if (window.NQInstall && window.NQInstall.can()) { b.hidden = false; txt.textContent = 'تعلّم من أي جهاز، وثبّت قِمّة كتطبيق بضغطة واحدة'; } };
+    b.onclick = async () => { b.hidden = true; const ok = window.NQInstall && await window.NQInstall.prompt(); if (ok) txt.textContent = 'تم التثبيت ✓ ستجد قِمّة على شاشتك الرئيسية'; };
+    ready(); addEventListener('nq-install-ready', ready);
+  }
+
+  // أبطال الأسبوع وعدد الطلاب والمدارس من لوحة الشرف المشتركة
+  async function liveBoard(root) {
+    const G = window.NQGame, B = G && G.backend;
+    if (!B) return;
+    try {
+      if (B.mode === 'local') await B.init();
+      if (B.mode === 'local') return;
+      const all = (await B.list()).filter(e => e && e.pid);
+      if (!root.isConnected) return;
+      const kids = new Set(all.map(e => e.pid)).size, schools = new Set(all.map(e => e.cls && e.cls.sid).filter(Boolean)).size;
+      const put = (id, n) => { const el = root.querySelector(id); if (el) { el.querySelector('b').textContent = ar(n); el.hidden = false; } };
+      if (kids >= 20) put('#lp-st-kids', kids);
+      if (schools >= 2) put('#lp-st-schools', schools);
+      const shown = all.filter(e => !e.hidden && e.name);
+      const wk = G._weekKey();
+      let top = shown.filter(e => e.week === wk && e.weekXp > 0).sort((a, b) => b.weekXp - a.weekXp).map(e => [e, e.weekXp]);
+      let title = 'أبطال هذا الأسبوع';
+      if (top.length < 3) { top = shown.filter(e => e.xp > 0).sort((a, b) => b.xp - a.xp).map(e => [e, e.xp]); title = 'الأعلى نقاطاً'; }
+      if (top.length < 3) return;
+      const medal = ['🥇', '🥈', '🥉', '٤', '٥'];
+      root.querySelector('#lp-top-title').textContent = title;
+      root.querySelector('#lp-top-list').innerHTML = top.slice(0, 5).map(([e, xp], i) => `<li><span class="rk${i < 3 ? ' m' : ''}">${medal[i]}</span><div><b>${esc(e.name)}</b><small>${esc(e.grade || '')}${e.cls && e.cls.school ? ' · ' + esc(e.cls.school) : ''}</small></div><span class="xp">${ar(xp)} نقطة</span></li>`).join('');
+      root.querySelector('#lp-top').hidden = false;
+    } catch (e) { /* تبقى الأقسام مخفية */ }
+  }
 })();
