@@ -14,7 +14,7 @@
   const firstName = s => String(s || '').trim().split(/\s+/)[0] || '';
   const lvlColor = v => v == null ? 'var(--muted)' : N().gradeOf(v).c;
   const avgOf = rs => rs.length ? Math.round(rs.reduce((a, r) => a + r.pct, 0) / rs.length) : null;
-  const subjName = r => { const s = N().subjectById(r.subjectId); return s ? s.name : r.kind === 'daily' ? 'تحدي اليوم' : r.kind === 'duel' ? 'تحدي صديق' : '—'; };
+  const subjName = r => { const s = N().subjectById(r.subjectId); return s ? s.name : r.kind === 'daily' ? 'تحدي اليوم' : r.kind === 'duel' ? 'تحدي صديق' : r.kind === 'quick' ? 'تدريب سريع' : '—'; };
 
   /* ================= 1) الواجبات ================= */
   function keyTitle(s, key) {
@@ -124,11 +124,7 @@
     const b = blocked(p); if (b) h += `<div class="px-lock" role="note">⏰ ${esc(b)}</div>`;
     }
     if (part === 'top') return h;
-    const open = openTasks(p);
-    if (open.length) h += `<section class="card px-tasks"><div class="pg-row"><h2>📌 واجبات من ولي أمرك</h2><span class="pr-tag">${num(open.length)} مطلوب</span></div>
-      <ul class="pg-list">${open.map(x => `<li><span class="dot" style="background:${x.st.late ? 'var(--bad)' : 'var(--accent)'}"></span>
-        <div><b>${esc(x.t.title)}</b><small>${x.s.icon} ${esc(x.s.name)} · <span style="color:${x.st.late ? 'var(--bad)' : 'inherit'}">${dueTxt(x.t.due)}</span></small></div>
-        <button type="button" class="btn small" data-task="${esc(x.t.id)}">ابدأ</button></li>`).join('')}</ul></section>`;
+    // واجبات ولي الأمر تظهر الآن داخل بطاقة «خطة اليوم» أعلى الصفحة
     const ex = upcoming(p).map(e => ({ e, pl: examPlan(p, e) })).filter(x => x.pl);
     if (ex.length) h += `<section class="card px-exams"><h2>📅 امتحاناتي القادمة</h2>${ex.map(({ e, pl }) => `<div class="px-exam col">
         <div class="px-exam-body"><b>${pl.s.icon} ${esc(pl.s.name)}</b>
@@ -720,6 +716,6 @@
     const ot = document.getElementById('fam-other'); if (ot) ot.onclick = () => N().familyJoinDialog();
   }
 
-  const api = { view: null, showDetails, familyHtml, bindFamily, homeHtml, bindHome, blocked, alerts, kidHtml, bindKid, renderReport, trimDetails, merge, whatsNewHtml, guideHtml, bindGuide, mistakesSheet };
+  const api = { view: null, showDetails, familyHtml, bindFamily, homeHtml, bindHome, blocked, alerts, kidHtml, bindKid, renderReport, trimDetails, merge, whatsNewHtml, guideHtml, bindGuide, mistakesSheet, openTasks, taskStatus, dueTxt, upcoming, examPlan };
   window.NQP = api;
 })();

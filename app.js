@@ -94,15 +94,19 @@
         playTone(587.33, 'sine', 0.25, 0, 0.2);
         playTone(880, 'sine', 0.45, 0.12, 0.22);
       },
-      speak(text) {
-        if (!window.speechSynthesis) return;
+      // يعيد true إذا بدأت القراءة، و'no-ar' إذا لا يوجد صوت عربي، و false إذا غير مدعوم. onState(true/false) أثناء القراءة
+      speak(text, onState) {
+        const ss = window.speechSynthesis; if (!ss) return false;
         try {
-          window.speechSynthesis.cancel();
+          ss.cancel();
+          const voices = ss.getVoices(), ar = voices.find(v => /^ar\b|^ar-/i.test(v.lang));
+          if (voices.length && !ar) return 'no-ar';
           const u = new SpeechSynthesisUtterance(text);
-          u.lang = 'ar';
-          u.rate = 0.95;
-          window.speechSynthesis.speak(u);
-        } catch (e) {}
+          u.lang = ar ? ar.lang : 'ar'; if (ar) u.voice = ar;
+          u.rate = 0.92;
+          if (onState) { u.onstart = () => onState(true); u.onend = u.onerror = () => onState(false); }
+          ss.speak(u); return true;
+        } catch (e) { return false; }
       }
     };
   })();
@@ -1091,7 +1095,7 @@
   function subjectStats(s, recsIn) {
     const recs = (recsIn || records()).filter(r => r.subjectId === s.id);
     const best = {};
-    recs.forEach(r => { if (r.key !== 'mistakes' && r.key !== 'srs') best[r.key] = Math.max(best[r.key] == null ? 0 : best[r.key], r.pct); });
+    recs.forEach(r => { if (r.key !== 'mistakes' && r.key !== 'srs' && r.key !== 'saved') best[r.key] = Math.max(best[r.key] == null ? 0 : best[r.key], r.pct); });
     const lessons = [];
     s.units.forEach(u => u.lessons.forEach(l => lessons.push({ key: u.id + '/' + l.id, unit: u, lesson: l })));
     const done = lessons.filter(x => best[x.key] != null).length;
@@ -1160,6 +1164,102 @@
     }
     return null;
   }
+  // اسم نوع الاختبار عندما لا يكون لمادة واحدة
+  const recLabel = (r, withIcon) => { const s = subjectById(r.subjectId); if (s) return (withIcon ? s.icon + ' ' : '') + esc(s.name); const k = { daily: ['📅', 'تحدي اليوم'], duel: ['⚔️', 'تحدي صديق'], quick: ['⚡', 'تدريب سريع'] }[r.kind] || ['', '—']; return (withIcon && k[0] ? k[0] + ' ' : '') + k[1]; };
+
+  /* ---------- تدرّب ٥ دقائق: ١٠ أسئلة من أضعف دروسك وأخطائك في كل المواد ---------- */
+  function quickPractice() {
+    const subs = gradeSubjects(), pick = new Map();
+    subs.forEach(s => {
+      const qs = allQuestions(s), byId = new Map(qs.map(q => [q.id, q])), st = subjectStats(s);
+      (wrongBank()[s.id] || []).forEach(id => { const q = byId.get(id); if (q) pick.set(q.id, [q, s.id, 3]); });
+      st.weak.forEach(w => { const [u, l] = w.key.split('/'); const les = s.units.find(x => x.id === u)?.lessons.find(x => x.id === l); (les ? les.questions : []).forEach(q => { if (!pick.has(q.id)) pick.set(q.id, [q, s.id, 2]); }); });
+    });
+    // لا توجد أخطاء ولا دروس ضعيفة: أسئلة من الدروس التي بدأها، أو من كل المواد
+    if (pick.size < 10) subs.forEach(s => { const st = subjectStats(s); st.lessons.filter(x => st.best[x.key] != null && st.best[x.key] < 90).forEach(x => x.lesson.questions.forEach(q => { if (!pick.has(q.id)) pick.set(q.id, [q, s.id, 1]); })); });
+    if (pick.size < 10) subs.forEach(s => allQuestions(s).forEach(q => { if (!pick.has(q.id)) pick.set(q.id, [q, s.id, 0]); }));
+    const all = shuffle([...pick.values()]).sort((a, b) => b[2] - a[2]).slice(0, 10);
+    if (!all.length) { toast('لا توجد أسئلة متاحة الآن'); return; }
+    const sids = new Map(all.map(([q, sid]) => [q.id, sid]));
+    startQuiz({ id: 'quick', name: 'تدريب سريع' }, 'quick', '⚡ تدرّب ٥ دقائق', all.map(x => x[0]), 'practice', { kind: 'quick', limit: 300, sids });
+  }
+
+  // مادة السؤال من رقمه (لأسئلة تحدي اليوم وتحدي صديق)
+  let qSid = null, qSidN = 0;
+  const sidOfQ = id => { if (!qSid || qSidN !== SUBJECTS.length) { qSid = new Map(); qSidN = SUBJECTS.length; SUBJECTS.forEach(s => allQuestions(s).forEach(q => qSid.set(q.id, s.id))); } return qSid.get(id) || null; };
+
+  /* ---------- الأسئلة المحفوظة ⭐ ---------- */
+  const savedMap = p => { p.saved = p.saved || {}; return p.saved; };
+  const isSaved = (p, id) => !!(p && p.saved && p.saved[id] && !p.saved[id].off);
+  function toggleSaved(p, q, sid) {
+    const m = savedMap(p), on = !isSaved(p, q.id);
+    m[q.id] = { s: sid, t: Date.now(), off: !on };
+    persist(); return on;
+  }
+  function savedBySubject(p) {
+    const out = {};
+    Object.entries((p && p.saved) || {}).forEach(([id, e]) => { if (e && !e.off) (out[e.s] = out[e.s] || []).push(id); });
+    return gradeSubjects().map(s => ({ s, ids: new Set(out[s.id] || []) })).filter(x => x.ids.size);
+  }
+
+  /* ---------- خطة اليوم ---------- */
+  const isToday = t => t && new Date(t).toDateString() === new Date().toDateString();
+  function planItems(p) {
+    const X = window.NQP, g = gx(), items = [];
+    if (X) {
+      (p.tasks || []).forEach(t => {
+        const s = subjectById(t.sid); if (!s) return;
+        const st = X.taskStatus(p, t);
+        if (st.done && !isToday(st.rec ? st.rec.date : t.doneAt)) return;
+        items.push({ ic: '📌', t: t.title, sub: `واجب من ولي أمرك · ${s.name}${st.done ? '' : ' · ' + X.dueTxt(t.due)}`, done: st.done, late: !st.done && st.late, act: `data-task="${esc(t.id)}"` });
+      });
+      X.upcoming(p).forEach(e => { const pl = X.examPlan(p, e); if (!pl) return; pl.today.slice(0, 3).forEach(x => items.push({ ic: '📅', t: x.lesson.name.includes(x.lesson.short) ? x.lesson.name : x.lesson.short + ': ' + x.lesson.name, sub: `خطة امتحان ${pl.s.name}`, done: false, act: `data-plan="${pl.s.id}|${x.key}"` })); });
+    }
+    const due = srsDue(p), n = due.subs.reduce((a, x) => a + x.ids.length, 0);
+    if (n) items.push({ ic: '🔁', t: `مراجعة اليوم (${nf(n)} سؤال)`, sub: 'أسئلة أخطأت فيها وحان موعدها', done: false, act: `data-srs="${due.subs[0].s.id}"` });
+    else if (records().some(r => r.key === 'srs' && isToday(r.date))) items.push({ ic: '🔁', t: 'مراجعة اليوم', sub: 'أنهيتها 👏', done: true });
+    if (g) {
+      const d = g._today(), dd = p.daily && p.daily[d];
+      items.push({ ic: '🏆', t: 'تحدي اليوم', sub: dd ? `${nf(dd.score)} من ${nf(dd.total)}` : '١٠ أسئلة من كل المواد', done: !!dd, href: '#daily' });
+      const goal = g._goalOf(p), ans = g._answeredOn(p, d);
+      items.push({ ic: '🎯', t: `هدف اليوم: ${nf(goal)} سؤالاً`, sub: ans >= goal ? 'تحقق 🎉' : `أجبت ${nf(ans)} · باقي ${nf(goal - ans)}`, done: ans >= goal, act: 'data-quick' });
+    }
+    return items;
+  }
+  function planCard(p) {
+    const items = planItems(p); if (!items.length) return '';
+    const n = items.filter(x => x.done).length, all = n === items.length;
+    return `<section class="card plan-card${all ? ' all' : ''}" aria-label="خطة اليوم">
+      <div class="pg-row"><h2>📋 خطة اليوم</h2><span class="plan-count">${all ? 'أنجزت كل شيء 🎉' : `${nf(n)} من ${nf(items.length)}`}</span></div>
+      <div class="db-bar"><i style="width:${Math.round(n / items.length * 100)}%;background:var(--ok)"></i></div>
+      <ul class="plan-list">${items.map(x => `<li class="${x.done ? 'done' : ''}${x.late ? ' late' : ''}"><span class="plan-ic" aria-hidden="true">${x.done ? '✓' : x.ic}</span>
+        <div><b>${esc(x.t)}</b><small>${esc(x.sub)}</small></div>
+        ${x.done ? '<span class="sr">تم</span>' : x.href ? `<a class="btn small ghost" href="${x.href}">ابدأ</a>` : `<button type="button" class="btn small ghost" ${x.act}>ابدأ</button>`}</li>`).join('')}</ul>
+    </section>`;
+  }
+
+  /* ---------- تنبيه السلسلة: لم يذاكر اليوم وسلسلته طويلة ---------- */
+  function streakWarn(rec) {
+    const n = streakDays(rec);
+    if (n < 3 || rec.some(r => isToday(r.date)) || new Date().getHours() < 16) return '';
+    return `<section class="streak-warn" role="status"><span aria-hidden="true">🔥</span><div><b>سلسلتك ${nf(n)} أيام ستنقطع الليلة!</b><small>اختبار واحد قصير يكفي للحفاظ عليها.</small></div>
+      <button type="button" class="btn warn small" data-quick>تدرّب ٥ دقائق</button></section>`;
+  }
+
+  /* ---------- مقارنة بنفسك: هذا الأسبوع مقابل الأسبوع الماضي ---------- */
+  function weekCompare(rec) {
+    const now = Date.now(), W = 7 * 864e5;
+    const a = rec.filter(r => r.date > now - W), b = rec.filter(r => r.date > now - 2 * W && r.date <= now - W);
+    const qa = a.reduce((s, r) => s + (r.total || 0), 0), qb = b.reduce((s, r) => s + (r.total || 0), 0);
+    if (!qa && !qb) return '';
+    let t;
+    if (!qb) t = `هذا الأسبوع أجبت ${nf(qa)} سؤالاً، بداية رائعة! 🚀`;
+    else if (qa > qb) t = `هذا الأسبوع أجبت ${nf(qa)} سؤالاً، أكثر من الأسبوع الماضي بـ ${nf(qa - qb)} 👏`;
+    else if (qa === qb) t = `هذا الأسبوع أجبت ${nf(qa)} سؤالاً، مثل الأسبوع الماضي تماماً. سؤال واحد إضافي وتتفوق على نفسك 💪`;
+    else t = `الأسبوع الماضي أجبت ${nf(qb)} سؤالاً، وهذا الأسبوع ${nf(qa)}. باقي ${nf(qb - qa + 1)} لتتفوق على نفسك 💪`;
+    return `<p class="week-cmp${qa > qb ? ' up' : ''}">${t}</p>`;
+  }
+
   function renderHome() {
     const p = cur(), g = gx();
     const subs = gradeSubjects();
@@ -1184,9 +1284,11 @@
       <header class="pg-head">
         <div><h1>${hello} يا ${esc(p.name.split(/\s+/)[0])}</h1>
           <p class="sub">${new Date().toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' })} · ${left ? `أنت على بُعد ${nf(left)} سؤال من هدف اليوم` : 'حققت هدف اليوم 🎉'}</p></div>
-        <a class="btn" href="#subjects">ابدأ اختباراً جديداً</a>
+        <div class="db-btns"><button type="button" class="btn warn" data-quick>⚡ تدرّب ٥ دقائق</button><a class="btn" href="#subjects">ابدأ اختباراً جديداً</a></div>
       </header>
       ${window.NQP ? window.NQP.homeHtml(p, 'top') : ''}
+      ${streakWarn(rec)}
+      ${planCard(p)}
       <section class="pg-grid2">
         <div class="hero-lvl">
           <div class="ring hero-ring" style="--p:${overall || 0};--rc:#FBBF24" role="img" aria-label="المستوى العام ${overall == null ? 'لم يُحسب بعد' : overall + '%'}"><div><b>${overall == null ? '—' : overall + '%'}</b><small>المستوى العام</small></div></div>
@@ -1206,6 +1308,7 @@
         ${tile('وقت المذاكرة', nf(Math.round(rec.reduce((a, r) => a + r.secs, 0) / 60)) + ' د', `${nf(Math.round(wRec.reduce((a, r) => a + r.secs, 0) / 60))} د هذا الأسبوع`)}
         ${tile('أيام متتالية', nf(streakDays(rec)) + ' ' + (streakDays(rec) === 1 ? 'يوم' : 'أيام'), streakDays(rec) >= 3 ? 'استمر! 🔥' : 'ذاكر يومياً لتحصل على وسام')}
       </section>
+      ${weekCompare(rec)}
       ${srsCard(p)}
       <section class="pg-grid3">
         <div class="card pg-card">
@@ -1230,18 +1333,50 @@
         <div class="pg-row"><h2>آخر نتائجي</h2><a href="#progress">كل النتائج</a></div>
         ${rec.length ? `<ul class="pg-list">${rec.slice(-5).reverse().map(r => {
           const s = subjectById(r.subjectId), gg = gradeOf(r.pct);
-          return `<li><span class="dot" style="background:${gg.c}"></span><div><b>${esc(r.title)}</b><small>${s ? esc(s.name) : (r.kind === 'daily' ? 'تحدي اليوم' : 'تحدي صديق')} · ${r.mode === 'exam' ? 'اختبار' : 'تدريب'} · ${shortDate(r.date)}</small></div><span class="pct" style="color:${gg.c}">${r.pct}%</span></li>`;
+          return `<li><span class="dot" style="background:${gg.c}"></span><div><b>${esc(r.title)}</b><small>${recLabel(r)} · ${r.mode === 'exam' ? 'اختبار' : 'تدريب'} · ${shortDate(r.date)}</small></div><span class="pct" style="color:${gg.c}">${r.pct}%</span></li>`;
         }).join('')}</ul>` : '<p class="empty">لم تحل أي اختبار بعد. <a href="#subjects">اختر مادة وابدأ</a></p>'}
       </section>
       <div class="sync" id="sync"></div>`;
     const go1 = document.getElementById('nxgo'); if (go1) go1.onclick = () => openStart(nx.s, nx.key);
     if (window.NQP) window.NQP.bindHome(p);
     bindSrs(p);
+    $app.querySelectorAll('[data-quick]').forEach(b => b.onclick = quickPractice);
     refreshSync();
   }
 
   /* ---------- 2) موادي ---------- */
   let subjFilter = 'all';
+  /* ---------- البحث عن درس ---------- */
+  let lessonQuery = '';
+  // توحيد الكتابة العربية للبحث: بدون تشكيل، والهمزات والتاء المربوطة والألف المقصورة موحّدة
+  const normAr = t => String(t || '').toLowerCase().replace(/[ً-ْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').trim();
+  function bindLessonSearch(subs) {
+    const inp = document.getElementById('ls-in'), out = document.getElementById('ls-res'); if (!inp) return;
+    const idx = subs.flatMap(s => s.units.flatMap(u => u.lessons.map(l => ({ s, u, l, key: u.id + '/' + l.id, n: normAr(l.name + ' ' + l.short + ' ' + u.name) }))));
+    const draw = () => {
+      lessonQuery = inp.value; const q = normAr(inp.value);
+      if (q.length < 2) { out.innerHTML = ''; return; }
+      const words = q.split(' '), hits = idx.filter(x => words.every(w => x.n.includes(w))).slice(0, 8);
+      out.innerHTML = hits.length ? `<ul class="ls-list">${hits.map((x, i) => { const b = bestFor(x.s.id, x.key); return `<li><span aria-hidden="true">${x.s.icon}</span><div><b>${esc(x.l.short)}: ${esc(x.l.name)}</b><small>${esc(x.s.name)} · ${esc(x.u.name.split(':')[0])}${b != null ? ` · أفضل درجة ${b}%` : ''}</small></div><button type="button" class="btn small" data-ls="${i}">ابدأ</button></li>`; }).join('')}</ul>`
+        : `<p class="muted ls-none">لا يوجد درس بهذا الاسم في ${esc(curGrade)}.</p>`;
+      out.querySelectorAll('[data-ls]').forEach(b => b.onclick = () => { const x = hits[+b.dataset.ls]; openStart(x.s, x.key); });
+    };
+    inp.oninput = draw; draw();
+  }
+  function savedCard() {
+    const p = cur(), list = savedBySubject(p); if (!list.length) return '';
+    const total = list.reduce((a, x) => a + x.ids.size, 0);
+    return `<section class="card saved-card"><div class="pg-row"><h2>⭐ أسئلتي المحفوظة</h2><span class="pr-tag">${nf(total)} سؤال</span></div>
+      <p class="muted" style="margin:0 0 10px">أسئلة حفظتها بالنجمة أثناء الاختبار لتراجعها قبل الامتحان.</p>
+      <div class="saved-subs">${list.map((x, i) => `<div class="saved-sub"><span aria-hidden="true">${x.s.icon}</span><div><b>${esc(x.s.name)}</b><small>${nf(x.ids.size)} سؤال</small></div>
+        <button type="button" class="btn small" data-sv="${i}">راجعها</button><button type="button" class="btn ghost small" data-svp="${i}" aria-label="اطبع أسئلة ${esc(x.s.name)} المحفوظة">🖨️</button></div>`).join('')}</div></section>`;
+  }
+  function bindSaved() {
+    const list = savedBySubject(cur()), pool = x => allQuestions(x.s).filter(q => x.ids.has(q.id));
+    $app.querySelectorAll('[data-sv]').forEach(b => b.onclick = () => { const x = list[+b.dataset.sv], ps = pool(x); if (ps.length) startQuiz(x.s, 'saved', '⭐ أسئلتي المحفوظة – ' + x.s.name, ps.slice(0, 30), 'practice'); });
+    $app.querySelectorAll('[data-svp]').forEach(b => b.onclick = () => { const x = list[+b.dataset.svp], ps = pool(x); if (ps.length) renderPrintWorksheet(x.s, 'أسئلتي المحفوظة', ps.slice(0, 30)); });
+  }
+
   function renderSubjectsPage() {
     const subs = gradeSubjects();
     const stats = subs.map(s => ({ s, st: subjectStats(s) }));
@@ -1255,6 +1390,10 @@
         <div><h1>موادي</h1><p class="sub">${nf(subs.length)} مواد · ${nf(lessons)} درساً · ${nf(qs)} سؤالاً في ${esc(curGrade)}</p></div>
         <div class="pg-chips" role="group" aria-label="تصفية المواد">${chip('all', 'الكل')}${chip('focus', 'تحتاج تركيزاً')}${chip('new', 'لم أبدأها')}</div>
       </header>
+      <div class="ls-box" role="search"><label class="sr" for="ls-in">ابحث عن درس</label>
+        <input id="ls-in" type="search" autocomplete="off" placeholder="🔎 ابحث عن درس… مثل: القيمة المطلقة" value="${esc(lessonQuery)}">
+        <div class="ls-res" id="ls-res" aria-live="polite"></div></div>
+      ${savedCard()}
       ${sugg ? `<section class="pg-sugg"><div><span>اقتراح اليوم</span><b>راجع «${esc(sugg.name)}» في ${esc(sugg.s.name)}</b><small>أفضل درجة لك ${sugg.pct}%${(wrongBank()[sugg.s.id] || []).length ? ` · لديك ${nf((wrongBank()[sugg.s.id] || []).length)} سؤال في مراجعة الأخطاء` : ''}</small></div>
         <button type="button" class="btn" id="sgo">ابدأ المراجعة</button></section>` : ''}
       <section class="pg-subjects">
@@ -1272,6 +1411,8 @@
         }).join('') || '<p class="empty">لا توجد مواد في هذا التصنيف.</p>'}
         ${subjFilter === 'all' ? COMING.filter(c => !subs.some(s => s.name === c.name)).map(c => `<div class="card pg-subj soon"><header><span class="ic" aria-hidden="true">${c.icon}</span><div><h2>${c.name}</h2><small>قريباً</small></div></header></div>`).join('') : ''}
       </section>`;
+    bindLessonSearch(subs);
+    bindSaved();
     $app.querySelectorAll('[data-sf]').forEach(b => b.onclick = () => { subjFilter = b.dataset.sf; route(); });
     $app.querySelectorAll('[data-mist]').forEach(b => b.onclick = () => openStart(subjectById(b.dataset.mist), 'mistakes'));
     const sg = document.getElementById('sgo'); if (sg) sg.onclick = () => openStart(sugg.s, sugg.key);
@@ -1335,7 +1476,7 @@
       <section class="card">
         <div class="pg-row"><h2>آخر الاختبارات</h2><a href="#records">السجل الكامل والنسخة الاحتياطية</a></div>
         ${all.length ? `<div class="table-wrap"><table><thead><tr><th>التاريخ</th><th>المادة</th><th>الاختبار</th><th>الوضع</th><th>الدرجة</th><th>النقاط</th></tr></thead><tbody>
-          ${all.slice(-10).reverse().map(r => { const s = subjectById(r.subjectId), gg = gradeOf(r.pct); return `<tr><td>${shortDate(r.date)}</td><td>${s ? s.icon + ' ' + esc(s.name) : (r.kind === 'daily' ? '📅 تحدي اليوم' : '⚔️ تحدي صديق')}</td><td>${esc(r.title)}</td><td>${r.mode === 'exam' ? 'اختبار' : 'تدريب'}</td><td><span class="best ${gg.cls}">${r.pct}%</span></td><td class="xp">+${nf(r.xp != null ? r.xp : 0)}</td></tr>`; }).join('')}
+          ${all.slice(-10).reverse().map(r => { const s = subjectById(r.subjectId), gg = gradeOf(r.pct); return `<tr><td>${shortDate(r.date)}</td><td>${recLabel(r, true)}</td><td>${esc(r.title)}</td><td>${r.mode === 'exam' ? 'اختبار' : 'تدريب'}</td><td><span class="best ${gg.cls}">${r.pct}%</span></td><td class="xp">+${nf(r.xp != null ? r.xp : 0)}</td></tr>`; }).join('')}
         </tbody></table></div>` : '<p class="empty">لا توجد اختبارات بعد.</p>'}
       </section>`;
     $app.querySelectorAll('[data-per]').forEach(b => b.onclick = () => { progPeriod = b.dataset.per; route(); });
@@ -1347,6 +1488,27 @@
     if (p == null) return '<span class="best">لم يُحل بعد</span>';
     return `<span class="best ${gradeOf(p).cls}">أفضل درجة ${p}%</span>`;
   }
+  /* ---------- طريق القمّة: دروس المادة محطات على طريق يصعد الجبل ---------- */
+  function summitPath(s) {
+    const st = subjectStats(s), L = st.lessons, n = L.length; if (!n) return '';
+    const W = 640, H = Math.max(300, n * 30 + 100), peakY = 34, baseY = H - 26;
+    const nextI = L.findIndex(x => st.best[x.key] == null || st.best[x.key] < 65);
+    const pts = L.map((x, i) => { const t = n === 1 ? 1 : i / (n - 1); return { x: Math.round(320 + 230 * (1 - t) * Math.sin(i * 1.25)), y: Math.round(baseY - 14 - t * (baseY - peakY - 58)), ...x, b: st.best[x.key] }; });
+    const cls = (b, i) => i === nextI ? 'next' : b == null ? 'none' : b >= 80 ? 'top' : b >= 65 ? 'ok' : 'weak';
+    const mastered = L.filter(x => st.best[x.key] >= 80).length;
+    const label = x => `${x.lesson.short}: ${x.lesson.name} · ${x.b == null ? 'لم يُحل بعد' : 'أفضل درجة ' + x.b + '%'}`;
+    return `<section class="card summit">
+      <div class="pg-row"><h2>🏔️ طريقك إلى القمّة</h2><span class="pr-tag">أتقنت ${nf(mastered)} من ${nf(n)}</span></div>
+      <svg class="sp-svg" viewBox="0 0 ${W} ${H}" role="group" aria-label="خريطة دروس ${esc(s.name)}">
+        <path d="M10 ${H - 6}L320 ${peakY - 6}L630 ${H - 6}z" class="sp-mt"/><path d="M320 ${peakY - 6}l-34 46 16-6 18 14 16-14 18 6z" class="sp-snow"/>
+        <path d="M320 ${peakY - 6}V${peakY - 40}" class="sp-pole"/><path d="M320 ${peakY - 40}h30l-8 9 8 9h-30z" class="sp-flag${mastered === n ? ' won' : ''}"/>
+        <polyline points="${pts.map(p => p.x + ',' + p.y).join(' ')} 320,${peakY - 6}" class="sp-trail"/>
+        ${pts.map((p, i) => `<g class="sp-dot ${cls(p.b, i)}" role="button" tabindex="0" data-start="${p.key}" aria-label="${esc(label(p))}"><title>${esc(label(p))}</title>
+          ${i === nextI ? `<circle cx="${p.x}" cy="${p.y}" r="21" class="sp-pulse"/>` : ''}<circle cx="${p.x}" cy="${p.y}" r="15"/><text x="${p.x}" y="${p.y + 5}">${p.b != null && p.b >= 80 ? '✓' : i + 1}</text></g>`).join('')}
+      </svg>
+      <div class="sp-legend"><span><i class="top"></i>متقن (80%+)</span><span><i class="ok"></i>جيد</span><span><i class="weak"></i>يحتاج مراجعة</span><span><i class="next"></i>محطتك التالية</span><span><i class="none"></i>لم يُحل</span></div>
+    </section>`;
+  }
   function renderSubject(s) {
     if (curGrade !== s.grade) { curGrade = s.grade; try { localStorage.setItem(KEY_GRADE, curGrade); } catch (e) { } }
     const wrongCount = (wrongBank()[s.id] || []).length;
@@ -1354,6 +1516,7 @@
       <div class="crumbs"><a href="#home">المواد</a> › ${esc(s.grade)} › ${esc(s.name)}</div>
       <h1>${s.icon} ${esc(s.name)}</h1>
       <p class="sub">${esc(s.grade)} — اختر الدرس الذي تريد الاختبار فيه</p>
+      ${summitPath(s)}
       ${s.units.map(u => `
         <section class="unit">
           <h2>${esc(u.name)} ${G('unitBadge', s, u) || ''}</h2>
@@ -1378,7 +1541,10 @@
         <div class="info"><b>مراجعة أخطائي</b><small>${wrongCount ? wrongCount + ' سؤال أخطأت فيه سابقاً' : 'لا توجد أخطاء محفوظة حالياً 👏'}</small></div>
         <button class="btn ghost" data-start="mistakes" ${wrongCount ? '' : 'disabled'}>راجع</button>
       </section>`;
-    $app.querySelectorAll('[data-start]').forEach(b => b.onclick = () => openStart(s, b.dataset.start));
+    $app.querySelectorAll('[data-start]').forEach(b => {
+      b.onclick = () => openStart(s, b.dataset.start);
+      if (b.classList.contains('sp-dot')) b.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openStart(s, b.dataset.start); } };
+    });
   }
 
   /* ---------- المراجعة المتباعدة للأخطاء ----------
@@ -2003,9 +2169,10 @@
       <section class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
           <span class="kind" style="margin:0">${esc(q.kind || 'سؤال')}</span>
-          <button type="button" class="btn-tts" id="q-tts" title="استمع للسؤال بصوت واضح" aria-label="استمع للسؤال">
+          <span class="q-tools"><button type="button" class="btn-star${isSaved(cur(), q.id) ? ' on' : ''}" id="q-star" aria-pressed="${isSaved(cur(), q.id)}" title="احفظ السؤال لمراجعته قبل الامتحان" aria-label="احفظ السؤال">${isSaved(cur(), q.id) ? '★' : '☆'}</button>
+          <button type="button" class="btn-tts" id="q-tts" title="استمع للسؤال والخيارات" aria-label="استمع للسؤال والخيارات">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-          </button>
+          </button></span>
         </div>
         <p class="qtext">${esc(q.q)}</p>
         ${qImg(q)}
@@ -2046,9 +2213,19 @@
     });
     const ttsBtn = document.getElementById('q-tts');
     if (ttsBtn) ttsBtn.onclick = () => {
-      ttsBtn.classList.add('speaking');
-      NQSound.speak(item.q.q);
-      setTimeout(() => ttsBtn.classList.remove('speaking'), 3500);
+      // يقرأ السؤال ثم الخيارات بترتيب ظهورها
+      const opts = (q.type === 'mcq' || q.type === 'multi') && !q.tf ? item.order.map((oi, n) => `${LETTERS[n]}: ${q.options[oi]}`).join('، ') : q.tf ? 'صح أم خطأ؟' : '';
+      const ok = NQSound.speak(q.q + (opts ? '. ' + opts : ''), on => ttsBtn.classList.toggle('speaking', on));
+      if (ok === 'no-ar') toast('جهازك لا يحتوي صوتاً عربياً للقراءة، جرّب متصفحاً آخر');
+      else if (!ok) toast('القراءة بالصوت غير متاحة في هذا المتصفح');
+    };
+    const starBtn = document.getElementById('q-star');
+    if (starBtn) starBtn.onclick = () => {
+      const sid = quiz.opts.sids ? quiz.opts.sids.get(q.id) : subjectById(quiz.subjectId) ? quiz.subjectId : sidOfQ(q.id);
+      if (!sid) return;
+      const on = toggleSaved(cur(), q, sid);
+      starBtn.classList.toggle('on', on); starBtn.textContent = on ? '★' : '☆'; starBtn.setAttribute('aria-pressed', String(on));
+      toast(on ? 'حُفظ السؤال ⭐ تجده في «موادي»' : 'أُزيل من الأسئلة المحفوظة');
     };
     on('[data-next]', () => { if (last) finish(); else { quiz.idx++; renderQuestion(); window.scrollTo(0, 0); } });
     on('[data-prev]', () => { quiz.idx--; renderQuestion(); });
@@ -2084,10 +2261,15 @@
     if (window.NQP) window.NQP.trimDetails(cur());
 
     if (!q.opts.noWrong) {
-      const set = new Set(state.wrong[q.subjectId] || []);
-      q.qs.forEach((it, i) => { scores[i] < 1 ? set.add(it.q.id) : set.delete(it.q.id); });
-      state.wrong[q.subjectId] = [...set];
-      srsUpdate(cur(), q.subjectId, q.qs.map((it, i) => [it.q.id, scores[i]]));
+      // التدريب السريع يجمع أسئلة من عدة مواد: كل سؤال يُحدَّث في بنك أخطاء مادته
+      const bySid = new Map();
+      q.qs.forEach((it, i) => { const sid = q.opts.sids ? q.opts.sids.get(it.q.id) : q.subjectId; if (!sid) return; (bySid.get(sid) || bySid.set(sid, []).get(sid)).push([it.q.id, scores[i]]); });
+      bySid.forEach((pairs, sid) => {
+        const set = new Set(state.wrong[sid] || []);
+        pairs.forEach(([id, sc]) => { sc < 1 ? set.add(id) : set.delete(id); });
+        state.wrong[sid] = [...set];
+        srsUpdate(cur(), sid, pairs);
+      });
     }
     if (q.opts.onDone) q.opts.onDone(rec);
     const extras = G('afterResult', rec) || null;
@@ -2113,7 +2295,8 @@
         <p class="rmeta">الوقت: ${fmtTime(rec.secs)} · صحيح ${items.filter(x => x.s === 1).length} · خطأ ${wrong.length} · تم الحفظ في السجل ✓</p>
         <div id="gm-result"></div>
         <div class="rbtns">
-          ${rec.kind ? `<a class="btn" href="${rec.kind === 'daily' ? '#daily' : '#duel-' + esc(rec.key.split('/')[1] || '')}">${rec.kind === 'daily' ? '📅 ترتيب تحدي اليوم' : '⚔️ نتيجة التحدي'}</a>`
+          ${rec.kind === 'quick' ? '<button class="btn" id="again-quick">⚡ ١٠ أسئلة جديدة</button>'
+            : rec.kind ? `<a class="btn" href="${rec.kind === 'daily' ? '#daily' : '#duel-' + esc(rec.key.split('/')[1] || '')}">${rec.kind === 'daily' ? '📅 ترتيب تحدي اليوم' : '⚔️ نتيجة التحدي'}</a>`
             : `<button class="btn" id="again">إعادة الاختبار</button>
           <a class="btn ghost" href="#subject-${rec.subjectId}">العودة للدروس</a>`}
           <button type="button" class="btn wa-btn" id="share-wa"><span>📲 مشاركة النتيجة واتساب</span></button>
@@ -2131,6 +2314,7 @@
         </div>
       </section>`;
     const ag = document.getElementById('again'); if (ag && s) ag.onclick = () => openStart(s, rec.key);
+    const aq = document.getElementById('again-quick'); if (aq) aq.onclick = quickPractice;
     const shareWa = document.getElementById('share-wa');
     if (shareWa) {
       shareWa.onclick = () => {
@@ -2179,7 +2363,7 @@
           <thead><tr><th>التاريخ</th><th>المادة</th><th>الاختبار</th><th>الوضع</th><th>الدرجة</th><th>النسبة</th><th>الوقت</th></tr></thead>
           <tbody>${rows.map(r => {
             const g = gradeOf(r.pct), s = subjectById(r.subjectId);
-            return `<tr><td>${fmtDate(r.date)}</td><td>${s ? s.icon + ' ' + esc(subjLabel(s)) : (r.kind === 'daily' ? '📅 تحدي اليوم' : r.kind === 'duel' ? '⚔️ تحدي صديق' : '—')}</td><td>${esc(r.title)}</td>
+            return `<tr><td>${fmtDate(r.date)}</td><td>${s ? s.icon + ' ' + esc(subjLabel(s)) : recLabel(r, true)}</td><td>${esc(r.title)}</td>
               <td>${r.mode === 'exam' ? 'اختبار' : 'تدريب'}</td><td>${r.score}/${r.total}</td>
               <td><span class="best ${g.cls}">${r.pct}% · ${g.t}</span></td><td>${fmtTime(r.secs)}</td></tr>`;
           }).join('')}</tbody></table>` : `<div class="empty">لا توجد اختبارات محفوظة بعد. <a href="#home" style="color:var(--brand);font-weight:700">ابدأ أول اختبار</a></div>`}

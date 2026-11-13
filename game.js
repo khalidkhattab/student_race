@@ -837,7 +837,7 @@
           <div class="card pg-tile"><small>متوسط الدرجات</small><b>${k.avg == null ? '—' : num(k.avg) + '٪'}</b><small class="note">${trendTxt(k.delta)}</small></div>
           <div class="card pg-tile"><small>اختبارات</small><b>${num(k.n)}</b><small class="note muted">${num(k.qs)} سؤالاً</small></div>
           <div class="card pg-tile"><small>وقت المذاكرة</small><b>${mins >= 60 ? num(Math.floor(mins / 60)) + ' س ' + num(mins % 60) + ' د' : num(mins) + ' د'}</b><small class="note muted">متوسط ${num(Math.round(mins / parentPeriod))} د يومياً</small></div>
-          <div class="card pg-tile"><small>آخر نشاط</small><b>${lastTxt}</b><small class="note muted">${k.last ? esc((NQ.subjectById(k.last.subjectId) || { name: k.last.kind === 'daily' ? 'تحدي اليوم' : 'تحدي صديق' }).name) : 'لم يبدأ بعد'}</small></div>
+          <div class="card pg-tile"><small>آخر نشاط</small><b>${lastTxt}</b><small class="note muted">${k.last ? esc((NQ.subjectById(k.last.subjectId) || { name: k.last.kind === 'daily' ? 'تحدي اليوم' : k.last.kind === 'quick' ? 'تدريب سريع' : 'تحدي صديق' }).name) : 'لم يبدأ بعد'}</small></div>
         </section>
         <div class="px-tabs" role="tablist" aria-label="أقسام تقرير ${fn}">${PTABS.map(([id, t]) => `<button type="button" role="tab" id="pt-${id}" aria-controls="pp-${id}" aria-selected="${parentTab === id}" class="${parentTab === id ? 'on' : ''}" data-ptab="${id}">${t}</button>`).join('')}</div>
         <div class="px-panel" role="tabpanel" id="pp-overview" aria-labelledby="pt-overview" ${parentTab === 'overview' ? '' : 'hidden'}>
@@ -947,6 +947,8 @@
     ['badges', 'daily', 'duels', 'duelPaid', 'goalPaid'].forEach(k => { if (src[k]) t[k] = Object.assign({}, src[k], t[k] || {}); });
     if (src.bonus) { const seen = new Set((t.bonus || []).map(b => b.t + '|' + b.why)); t.bonus = (t.bonus || []).concat(src.bonus.filter(b => !seen.has(b.t + '|' + b.why))); }
     if (src.rewards && !t.rewards) t.rewards = src.rewards;
+    // الأسئلة المحفوظة: لكل سؤال يبقى آخر تغيير (حفظ أو إزالة)
+    if (src.saved) { t.saved = t.saved || {}; Object.entries(src.saved).forEach(([id, e]) => { const m = t.saved[id]; if (e && (!m || (e.t || 0) > (m.t || 0))) t.saved[id] = e; }); }
     ['team', 'goal', 'hidden'].forEach(k => { if (t[k] == null && src[k] != null) t[k] = src[k]; });
     if (window.NQP) window.NQP.merge(t, src);
     if (window.NQSchools) window.NQSchools.merge(t, src);
