@@ -287,6 +287,7 @@
     const tname = new Map(teachers.map(t => [t.id, t.name]));
     classes.sort((a, b) => ALL_GRADES.indexOf(a.grade) - ALL_GRADES.indexOf(b.grade) || String(a.section).localeCompare(String(b.section)));
     app.innerHTML = page(me.role === 'school' ? `🏫 ${esc(school ? school.name : '')}` : `👩‍🏫 ${esc(me.name)}`, `${esc(school ? school.name + ' · ' + school.region : '')} · ${me.role === 'school' ? 'حساب المدرسة' : 'معلم'}`, `
+      ${me.role === 'school' ? `<div id="sd-root" class="sd-root" aria-live="polite"><section class="card"><p class="muted" style="margin:0">⏳ جارٍ حساب إحصائيات المدرسة…</p></section></div>` : ''}
       ${me.role === 'school' ? `<section class="card"><div class="pg-row"><h2>المعلمون (${num(teachers.filter(t => t.role === 'teacher').length)})</h2><button type="button" class="btn small" id="st-inv">+ دعوة معلمين</button></div>
         <ul class="pg-list">${teachers.map(t => `<li><div><b>${esc(t.name)}</b><small>${t.role === 'school' ? 'حساب المدرسة' : 'معلم'}</small></div>${t.role === 'teacher' ? `<button type="button" class="linkish" data-rm="${t.id}">إزالة</button>` : ''}</li>`).join('')}</ul></section>` : ''}
       <section class="card"><div class="pg-row"><h2>الفصول (${num(classes.length)})</h2></div>
@@ -316,25 +317,171 @@
       catch (x) { N().toast(errTxt(x)); }
     };
     // ملخص كل فصل: عدد الطلاب والنشطين ومتوسط الأسبوع، مع تنبيه عند التراجع
+    kidsCache = new Map();
     classStats(classes.slice(0, 30));
+    if (me.role === 'school') schoolDash({ me, school, classes: classes.slice(0, 60), teachers, tname });
     // ترتيب المدرسة من لوحة الشرف المشتركة
     const el = document.getElementById('st-rank');
     try { const list = await window.NQGame.backend.list(true); el.innerHTML = schoolBoardHtml(list.filter(x => x.cls && x.cls.sid === me.sid)); }
     catch (e) { el.innerHTML = '<p class="muted">تعذّر تحميل الترتيب.</p>'; }
   }
+  // طلاب كل فصل (تُحمّل مرة واحدة لكل عرض للصفحة ويستخدمها الملخص ولوحة المدرسة)
+  let kidsCache = new Map();
+  const loadKids = c => {
+    if (!kidsCache.has(c.id)) kidsCache.set(c.id, db.query('students', [], { parent: 'classes/' + c.id, limit: 200 })
+      .then(rows => rows.map(r => { try { return JSON.parse(r.json); } catch (e) { return null; } }).filter(Boolean)));
+    return kidsCache.get(c.id);
+  };
   async function classStats(classes) {
     const now = Date.now(), avg = rs => rs.length ? Math.round(rs.reduce((a, r) => a + r.pct, 0) / rs.length) : null;
     await Promise.all(classes.map(async c => {
       const el = document.querySelector(`[data-stat="${c.id}"]`); if (!el) return;
       try {
-        const rows = await db.query('students', [], { parent: 'classes/' + c.id, limit: 200 });
-        const kids = rows.map(r => { try { return JSON.parse(r.json); } catch (e) { return null; } }).filter(Boolean);
+        const kids = await loadKids(c);
         const w = kids.map(p => (p.records || []).filter(r => r.date > now - 7 * DAY)), pw = kids.flatMap(p => (p.records || []).filter(r => r.date > now - 14 * DAY && r.date <= now - 7 * DAY));
         const act = w.filter(x => x.length).length, a = avg(w.flat()), b = avg(pw), down = a != null && b != null && a <= b - 5;
         el.innerHTML = kids.length ? `${kidsN(kids.length)} · ${num(act)} نشط هذا الأسبوع${a != null ? ` · متوسط ${num(a)}٪` : ''}${down ? ` <b class="sc-down" title="تراجع عن الأسبوع الماضي">⚠️ تراجع ${num(b - a)}٪</b>` : ''}` : 'لم ينضم طلاب بعد';
         if (down) el.closest('.sc-class').classList.add('warn');
       } catch (e) { el.textContent = ''; }
     }));
+  }
+  /* ================= لوحة حساب المدرسة ================= */
+  const sdView = { sort: 'avg', dir: -1 };
+  const avgOf = rs => rs.length ? Math.round(rs.reduce((a, r) => a + r.pct, 0) / rs.length) : null;
+  const twoNames = n => String(n || '').trim().split(/\s+/).slice(0, 2).join(' ');
+  const monthName = () => new Date().toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' });
+  async function schoolDash({ me, school, classes, teachers, tname }) {
+    const root = document.getElementById('sd-root'); if (!root) return;
+    const NQ = N(), now = Date.now(), W = 7 * DAY, M = 30 * DAY;
+    // 1) تحميل طلاب كل الفصول ودمج الطالب الموجود في أكثر من فصل
+    const perClass = await Promise.all(classes.map(c => loadKids(c).then(k => ({ c, kids: k })).catch(() => ({ c, kids: [] }))));
+    if (!document.getElementById('sd-root')) return;
+    await Promise.all([...new Set(classes.map(c => c.grade))].map(g => window.NQLoadGrade ? window.NQLoadGrade(g).catch(() => { }) : null));
+    const byId = new Map();
+    perClass.forEach(({ c, kids }) => kids.forEach(p => {
+      const o = byId.get(p.id);
+      if (!o) byId.set(p.id, Object.assign({}, p, { records: (p.records || []).slice(), _cls: [c], _allow: new Set(p._allowed || gradeSubs(p.grade).map(s => s.id)) }));
+      else { const seen = new Set(o.records.map(r => r.id)); (p.records || []).forEach(r => { if (!seen.has(r.id)) o.records.push(r); }); o._cls.push(c); (p._allowed || gradeSubs(p.grade).map(s => s.id)).forEach(x => o._allow.add(x)); }
+    }));
+    const all = [...byId.values()];
+    const wk = p => p.records.filter(r => r.date > now - W), pwk = p => p.records.filter(r => r.date > now - 2 * W && r.date <= now - W);
+    const act = all.filter(p => wk(p).length), sAvg = avgOf(all.flatMap(wk)), sPrev = avgOf(all.flatMap(pwk));
+    const trendTxt = (a, b) => a == null || b == null ? '<span class="pr-flat">—</span>' : a > b ? `<span class="pr-up">▲ ${num(a - b)}</span>` : a < b ? `<span class="pr-down">▼ ${num(b - a)}</span>` : '<span class="pr-flat">=</span>';
+    const color = v => v == null ? 'var(--muted)' : NQ.gradeOf(v).c;
+    const pctTxt = v => v == null ? '—' : num(v) + '٪';
+    const grades = [...new Set(all.map(p => p.grade))].sort((a, b) => ALL_GRADES.indexOf(a) - ALL_GRADES.indexOf(b));
+    const gradeRows = grades.map(g => { const ps = all.filter(p => p.grade === g); return { g, n: ps.length, act: ps.filter(p => wk(p).length).length, avg: avgOf(ps.flatMap(wk)), prev: avgOf(ps.flatMap(pwk)) }; });
+
+    // 2) مقارنة الفصول
+    const clsRows = perClass.map(({ c, kids }) => { const w = kids.map(p => (p.records || []).filter(r => r.date > now - W)); const pw = kids.flatMap(p => (p.records || []).filter(r => r.date > now - 2 * W && r.date <= now - W));
+      return { c, teacher: tname.get(c.teacher) || c.teacherName || '', n: kids.length, act: kids.length ? Math.round(w.filter(x => x.length).length / kids.length * 100) : null, avg: avgOf(w.flat()), prev: avgOf(pw) }; });
+
+    // 3) ترتيب المدرسة في المنطقة والكويت (متوسط نقاط أفضل 20 طالباً هذا الأسبوع)
+    let rankHtml = '<p class="muted">تعذّر تحميل الترتيب.</p>';
+    try {
+      const list = await window.NQGame.backend.list(true), wkKey = window.NQGame._weekKey(), by = {};
+      list.filter(e => e.cls && e.cls.sid && e.week === wkKey && (e.weekXp || 0) > 0).forEach(e => { (by[e.cls.sid] = by[e.cls.sid] || { name: e.cls.school, region: e.cls.region, xs: [] }).xs.push(e.weekXp); });
+      const rows = Object.entries(by).map(([sid, v]) => ({ sid, ...v, score: Math.round(v.xs.sort((a, b) => b - a).slice(0, 20).reduce((a, b) => a + b, 0) / 20) })).sort((a, b) => b.score - a.score);
+      const place = rs => { const i = rs.findIndex(r => r.sid === me.sid); return i < 0 ? null : { i, n: rs.length, gap: i > 0 ? rs[i - 1].score - rs[i].score + 1 : 0, above: i > 0 ? rs[i - 1].name : null, score: rs[i].score }; };
+      const k = place(rows), reg = place(rows.filter(r => r.region === school.region));
+      rankHtml = k ? `<div class="sd-rank"><div><small>في ${esc(school.region)}</small><b>${num(reg.i + 1)}</b><small>من ${cnt(reg.n, 'مدرسة واحدة', 'مدرستين', 'مدارس', 'مدرسة')}</small></div><div><small>على مستوى الكويت</small><b>${num(k.i + 1)}</b><small>من ${cnt(k.n, 'مدرسة واحدة', 'مدرستين', 'مدارس', 'مدرسة')}</small></div><div><small>نقاط المدرسة هذا الأسبوع</small><b>${num(k.score)}</b><small>متوسط أفضل 20 طالباً</small></div></div>
+        <p class="sd-gap">${reg.i === 0 ? `🥇 مدرستكم الأولى في ${esc(school.region)} هذا الأسبوع! حافظوا على الصدارة.` : `تحتاجون <b>${cnt(reg.gap, 'نقطة واحدة', 'نقطتين', 'نقاط', 'نقطة')}</b> إضافية في المتوسط لتتقدموا على «${esc(reg.above)}» في ${esc(school.region)}.`}</p>`
+        : '<p class="muted">مدرستكم لم تدخل الترتيب هذا الأسبوع بعد. تدخل المدرسة الترتيب عندما يجمع طلابها نقاطاً هذا الأسبوع.</p>';
+    } catch (e) { }
+
+    // 4) نشاط المعلمين
+    const tRows = teachers.filter(t => t.role === 'teacher').map(t => {
+      const mine = perClass.filter(x => x.c.teacher === t.id), kids = mine.flatMap(x => x.kids);
+      const tasks = mine.reduce((a, x) => a + (Array.isArray(x.c.tasks) ? x.c.tasks.filter(k => now - (k.created || 0) < M).length : 0), 0);
+      const lastMsg = Math.max(0, ...mine.map(x => (x.c.msg && x.c.msg.t) || 0));
+      return { t, cls: mine.length, n: kids.length, act: kids.length ? Math.round(kids.filter(p => (p.records || []).some(r => r.date > now - W)).length / kids.length * 100) : null, tasks, lastMsg };
+    }).sort((a, b) => b.n - a.n);
+
+    // 5) أضعف الدروس على مستوى المدرسة
+    const weakL = [];
+    grades.forEach(g => gradeSubs(g).forEach(s => {
+      const ps = all.filter(p => p.grade === g && p._allow.has(s.id)); if (ps.length < 3) return;
+      const bests = ps.map(p => NQ.subjectStats(s, p.records).best);
+      s.units.forEach(u => u.lessons.forEach(l => { const k = u.id + '/' + l.id, v = bests.map(b => b[k]).filter(x => x != null); if (v.length >= 3) { const a = Math.round(v.reduce((x, y) => x + y, 0) / v.length); if (a < 65) weakL.push({ g, s, l, a, n: v.length }); } }));
+    }));
+    weakL.sort((a, b) => a.a - b.a);
+
+    // 8) أبطال الشهر لكل صف (يُستثنى من أخفى ولي أمره اسمه من لوحة الشرف)
+    const heroes = grades.map(g => ({ g, top: all.filter(p => p.grade === g && !p.hidden).map(p => ({ p, xp: p.records.filter(r => r.date > now - M).reduce((a, r) => a + (r.xp || 0), 0) })).filter(x => x.xp > 0).sort((a, b) => b.xp - a.xp).slice(0, 3) })).filter(x => x.top.length);
+    const sectionOf = p => (p._cls[0] && p._cls[0].section) || '';
+
+    const cols = [['cls', 'الفصل'], ['teacher', 'المعلم'], ['n', 'الطلاب'], ['act', 'النشطون'], ['avg', 'متوسط الأسبوع'], ['tr', 'الاتجاه']];
+    const sortV = (r, k) => k === 'cls' ? ALL_GRADES.indexOf(r.c.grade) * 100 + (parseInt(r.c.section, 10) || 0) : k === 'teacher' ? r.teacher : k === 'tr' ? (r.avg != null && r.prev != null ? r.avg - r.prev : -999) : r[k] == null ? -1 : r[k];
+    const clsTable = () => clsRows.slice().sort((a, b) => { const x = sortV(a, sdView.sort), y = sortV(b, sdView.sort); return (typeof x === 'string' ? x.localeCompare(y, 'ar') : x - y) * sdView.dir; })
+      .map(r => `<tr class="${r.avg != null && r.prev != null && r.avg <= r.prev - 5 ? 'sd-down' : ''}"><td><button type="button" class="linkish" data-sdcls="${r.c.id}">${esc(r.c.grade)} · ${esc(r.c.section)}</button><small class="sc-allowed">${esc(subjLabel(r.c))}</small></td><td>${esc(r.teacher)}</td><td>${num(r.n)}</td><td>${r.act == null ? '—' : num(r.act) + '٪'}</td><td style="color:${color(r.avg)};font-weight:800">${pctTxt(r.avg)}</td><td>${trendTxt(r.avg, r.prev)}</td></tr>`).join('');
+    const clsHead = () => cols.map(([k, t]) => `<th aria-sort="${sdView.sort === k ? (sdView.dir > 0 ? 'ascending' : 'descending') : 'none'}"><button type="button" class="sc-sort" data-sdsort="${k}">${t}${sdView.sort === k ? (sdView.dir > 0 ? ' ▲' : ' ▼') : ''}</button></th>`).join('');
+    const ago = t => { if (!t) return '—'; const d = Math.floor((now - t) / DAY); return d <= 0 ? 'اليوم' : d === 1 ? 'أمس' : `منذ ${num(d)} أيام`; };
+
+    root.innerHTML = `
+      <section class="pg-tiles">
+        <div class="card pg-tile"><small>الطلاب المنضمون</small><b>${num(all.length)}</b><small class="note muted">في ${cnt(classes.length, 'فصل واحد', 'فصلين', 'فصول', 'فصلاً')}</small></div>
+        <div class="card pg-tile"><small>نشطون هذا الأسبوع</small><b>${all.length ? num(Math.round(act.length / all.length * 100)) + '٪' : '—'}</b><small class="note muted">${num(act.length)} من ${num(all.length)}</small></div>
+        <div class="card pg-tile"><small>متوسط المدرسة (7 أيام)</small><b style="color:${color(sAvg)}">${pctTxt(sAvg)}</b><small class="note">${trendTxt(sAvg, sPrev)} عن الأسبوع الماضي</small></div>
+        <div class="card pg-tile"><small>أسئلة هذا الأسبوع</small><b>${num(all.reduce((a, p) => a + wk(p).reduce((s, r) => s + (r.total || 0), 0), 0))}</b><small class="note muted">من كل طلاب المدرسة</small></div>
+      </section>
+      <div class="sd-actions db-btns"><button type="button" class="btn" id="sd-ann">📣 إعلان للمدرسة</button><button type="button" class="btn ghost" id="sd-report">🖨️ تقرير المدرسة الشهري</button><button type="button" class="btn ghost" id="sd-poster" ${heroes.length ? '' : 'disabled'}>🏆 لوحة شرف للطباعة</button></div>
+      <section class="pg-grid2">
+        <div class="card"><h2>🏅 ترتيب المدرسة</h2>${rankHtml}</div>
+        <div class="card"><h2>📚 حسب الصف</h2>${gradeRows.length ? `<table class="px-table"><thead><tr><th>الصف</th><th>الطلاب</th><th>النشطون</th><th>المتوسط</th><th></th></tr></thead><tbody>${gradeRows.map(r => `<tr><td><b>${esc(r.g)}</b></td><td>${num(r.n)}</td><td>${r.n ? num(Math.round(r.act / r.n * 100)) + '٪' : '—'}</td><td style="color:${color(r.avg)};font-weight:800">${pctTxt(r.avg)}</td><td>${trendTxt(r.avg, r.prev)}</td></tr>`).join('')}</tbody></table>` : '<p class="empty">لم ينضم طلاب بعد.</p>'}</div>
+      </section>
+      <section class="card"><h2>🏫 مقارنة الفصول</h2>${clsRows.length ? `<div class="table-wrap"><table class="px-table sc-table"><thead><tr id="sd-th">${clsHead()}</tr></thead><tbody id="sd-tb">${clsTable()}</tbody></table></div><p class="hint" style="margin:6px 0 0">الصف الملوّن: تراجع متوسطه ٥٪ أو أكثر عن الأسبوع الماضي.</p>` : '<p class="empty">لا توجد فصول بعد.</p>'}</section>
+      <section class="card"><h2>👩‍🏫 نشاط المعلمين</h2>${tRows.length ? `<div class="table-wrap"><table class="px-table"><thead><tr><th>المعلم</th><th>الفصول</th><th>الطلاب</th><th>طلاب نشطون</th><th>واجبات هذا الشهر</th><th>آخر رسالة للفصل</th></tr></thead><tbody>${tRows.map(r => `<tr class="${r.cls && !r.tasks && !r.lastMsg ? 'sd-quiet' : ''}"><td><b>${esc(r.t.name)}</b></td><td>${num(r.cls)}</td><td>${num(r.n)}</td><td>${r.act == null ? '—' : num(r.act) + '٪'}</td><td>${num(r.tasks)}</td><td>${ago(r.lastMsg)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">لم ينضم معلمون بعد. ادعهم من قسم «المعلمون» أدناه.</p>'}</section>
+      <section class="card"><h2>⚠️ أضعف الدروس في المدرسة</h2><p class="muted" style="margin:0 0 8px">دروس متوسط طلاب المدرسة فيها أقل من 65٪ (3 طلاب على الأقل حلّوها) — مفيدة لرؤساء الأقسام.</p>
+        ${weakL.length ? `<ul class="pg-list">${weakL.slice(0, 10).map(w => `<li><span class="dot" style="background:${color(w.a)}"></span><div><b>${esc(w.l.short)}: ${esc(w.l.name)}</b><small>${esc(w.g)} · ${w.s.icon} ${esc(w.s.name)} · ${kidsN(w.n)}</small></div><span class="pct" style="color:${color(w.a)}">${num(w.a)}٪</span></li>`).join('')}</ul>` : '<p class="empty">لا توجد دروس ضعيفة على مستوى المدرسة حالياً 👏</p>'}</section>`;
+
+    const bindT = () => { root.querySelectorAll('[data-sdsort]').forEach(b => b.onclick = () => { const k = b.dataset.sdsort; sdView.dir = sdView.sort === k ? -sdView.dir : (k === 'cls' || k === 'teacher' ? 1 : -1); sdView.sort = k; document.getElementById('sd-th').innerHTML = clsHead(); document.getElementById('sd-tb').innerHTML = clsTable(); bindT(); }); root.querySelectorAll('[data-sdcls]').forEach(b => b.onclick = () => N().go('#staff-class-' + b.dataset.sdcls)); };
+    bindT();
+
+    // 6) إعلان للمدرسة كلها: يُكتب في كل فصول المدرسة ويظهر لكل طلابها
+    document.getElementById('sd-ann').onclick = () => {
+      const ov = document.createElement('div'); ov.className = 'overlay';
+      ov.innerHTML = `<form class="card" role="dialog" aria-modal="true" aria-labelledby="sda-t" style="max-width:480px"><h2 id="sda-t">📣 إعلان لكل طلاب المدرسة</h2>
+        <p class="muted" style="margin:0">يظهر أعلى صفحة كل طالب منضم في ${cnt(classes.length, 'فصل واحد', 'فصلين', 'فصول', 'فصلاً')}، باسم «${esc(school.name)}». يحل محل آخر رسالة للفصل.</p>
+        <label class="sr" for="sda-x">نص الإعلان</label><textarea id="sda-x" rows="3" maxlength="160" required placeholder="مثال: بالتوفيق في اختبارات نهاية الفترة 🍀" style="width:100%;box-sizing:border-box;margin:10px 0;padding:10px;border-radius:12px;border:1.5px solid var(--line);font:inherit;background:var(--field);color:var(--ink)"></textarea>
+        <p class="muted" id="sda-p" style="margin:0" aria-live="polite"></p>
+        <div class="actions"><button type="button" class="btn ghost" data-x>إلغاء</button><button class="btn" type="submit">إرسال للجميع</button></div></form>`;
+      document.body.appendChild(ov); ov.querySelector('textarea').focus();
+      ov.querySelector('[data-x]').onclick = () => ov.remove();
+      ov.querySelector('form').onsubmit = async e => {
+        e.preventDefault(); const text = ov.querySelector('textarea').value.trim().slice(0, 160); if (!text) return;
+        const btn = ov.querySelector('[type=submit]'), pr = ov.querySelector('#sda-p'); btn.disabled = true; let ok = 0, bad = 0;
+        const t = Date.now();
+        for (const c of classes) { try { await db.set('classes/' + c.id, Object.assign({}, stripId(c), { msg: { text, t, by: school.name } })); c.msg = { text, t, by: school.name }; ok++; } catch (x) { bad++; } pr.textContent = `⏳ ${num(ok + bad)} من ${num(classes.length)}…`; }
+        ov.remove(); N().toast(bad ? `أُرسل الإعلان إلى ${cnt(ok, 'فصل واحد', 'فصلين', 'فصول', 'فصلاً')}، وتعذّر ${cnt(bad, 'فصل واحد', 'فصلين', 'فصول', 'فصلاً')}` : 'تم إرسال الإعلان لكل فصول المدرسة ✓');
+      };
+    };
+
+    // 7 و 8) تقرير شهري ولوحة شرف (صفحة A4 للطباعة أو الحفظ PDF)
+    const printSheet = (label, html) => {
+      const ov = document.createElement('div'); ov.className = 'overlay ws-print';
+      ov.innerHTML = `<div class="card ws-modal" role="dialog" aria-modal="true" aria-label="${label}"><div class="no-print ws-bar"><b>${label}</b><div><button type="button" class="btn" data-pr>🖨️ طباعة / حفظ PDF</button> <button type="button" class="btn ghost" data-x>إغلاق</button></div></div><div class="ws-paper">${html}</div></div>`;
+      const close = () => { ov.remove(); document.body.classList.remove('ws-printing'); };
+      ov.querySelector('[data-x]').onclick = close; ov.onclick = e => { if (e.target === ov) close(); };
+      ov.querySelector('[data-pr]').onclick = () => { document.body.classList.add('ws-printing'); try { window.print(); } catch (x) { N().toast('الطباعة غير متاحة هنا'); } setTimeout(() => document.body.classList.remove('ws-printing'), 800); };
+      document.body.appendChild(ov); ov.querySelector('[data-pr]').focus();
+    };
+    document.getElementById('sd-report').onclick = () => {
+      const mAll = all.flatMap(p => p.records.filter(r => r.date > now - M));
+      printSheet('تقرير المدرسة الشهري', `<div class="sdr">
+        <div class="ws-head"><div><h2>تقرير المدرسة الشهري</h2><p>${esc(school.name)} · ${esc(school.region)} · آخر 30 يوماً حتى ${new Date().toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' })}</p></div><div class="ws-brand"><b>قِمّة</b><small>تعلَّم. أتقِن. تصدَّر.</small></div></div>
+        <div class="sdr-kpis"><div><b>${num(all.length)}</b><small>طالباً منضماً</small></div><div><b>${num(all.filter(p => p.records.some(r => r.date > now - M)).length)}</b><small>نشطون هذا الشهر</small></div><div><b>${pctTxt(avgOf(mAll))}</b><small>متوسط الدرجات</small></div><div><b>${num(mAll.reduce((a, r) => a + (r.total || 0), 0))}</b><small>سؤالاً محلولاً</small></div></div>
+        <h3>حسب الصف</h3><table><thead><tr><th>الصف</th><th>الطلاب</th><th>النشطون (7 أيام)</th><th>متوسط الأسبوع</th></tr></thead><tbody>${gradeRows.map(r => `<tr><td>${esc(r.g)}</td><td>${num(r.n)}</td><td>${r.n ? num(Math.round(r.act / r.n * 100)) + '٪' : '—'}</td><td>${pctTxt(r.avg)}</td></tr>`).join('')}</tbody></table>
+        <h3>الفصول</h3><table><thead><tr><th>الفصل</th><th>المادة</th><th>المعلم</th><th>الطلاب</th><th>النشطون</th><th>المتوسط</th></tr></thead><tbody>${clsRows.map(r => `<tr><td>${esc(r.c.grade)} · ${esc(r.c.section)}</td><td>${esc(subjLabel(r.c))}</td><td>${esc(r.teacher)}</td><td>${num(r.n)}</td><td>${r.act == null ? '—' : num(r.act) + '٪'}</td><td>${pctTxt(r.avg)}</td></tr>`).join('')}</tbody></table>
+        ${tRows.length ? `<h3>نشاط المعلمين</h3><table><thead><tr><th>المعلم</th><th>الفصول</th><th>الطلاب</th><th>واجبات الشهر</th></tr></thead><tbody>${tRows.map(r => `<tr><td>${esc(r.t.name)}</td><td>${num(r.cls)}</td><td>${num(r.n)}</td><td>${num(r.tasks)}</td></tr>`).join('')}</tbody></table>` : ''}
+        ${weakL.length ? `<h3>أضعف الدروس</h3><table><thead><tr><th>الدرس</th><th>الصف والمادة</th><th>المتوسط</th></tr></thead><tbody>${weakL.slice(0, 8).map(w => `<tr><td>${esc(w.l.short)}: ${esc(w.l.name)}</td><td>${esc(w.g)} · ${esc(w.s.name)}</td><td>${num(w.a)}٪</td></tr>`).join('')}</tbody></table>` : ''}
+        ${heroes.length ? `<h3>أبطال الشهر</h3><table><thead><tr><th>الصف</th><th>الطلاب</th></tr></thead><tbody>${heroes.map(h => `<tr><td>${esc(h.g)}</td><td>${h.top.map(x => esc(twoNames(x.p.name))).join('، ')}</td></tr>`).join('')}</tbody></table>` : ''}
+      </div>`);
+    };
+    document.getElementById('sd-poster').onclick = () => printSheet('لوحة شرف للطباعة', `<div class="sdp">
+        <div class="sdp-top"><svg aria-hidden="true" width="84" height="60" viewBox="0 0 56 40"><path d="M2 38L20 10l8 11 6-8 20 25z" fill="#0f766e"/><path d="M20 10l5 7-5-1-4 5z" fill="#fff" opacity=".85"/><path d="M34 13V1" stroke="#10233f" stroke-width="1.6"/><path d="M34 1h9l-2.5 3 2.5 3h-9z" fill="#f2b705"/></svg>
+          <h1>🏆 أبطال الشهر</h1><p>${esc(school.name)} · ${monthName()}</p></div>
+        <div class="sdp-grid">${heroes.map(h => `<div class="sdp-g"><h2>${esc(h.g)}</h2><ol>${h.top.map((x, i) => `<li><span>${['🥇', '🥈', '🥉'][i]}</span><b>${esc(twoNames(x.p.name))}</b>${sectionOf(x.p) ? `<small>شعبة ${esc(sectionOf(x.p))}</small>` : ''}</li>`).join('')}</ol></div>`).join('')}</div>
+        <p class="sdp-foot">رحلتك إلى القمّة تبدأ هنا · منصة قِمّة لاختبارات المنهج الكويتي</p></div>`);
   }
   function schoolBoardHtml(entries) {
     const wk = window.NQGame._weekKey();
@@ -741,7 +888,7 @@
     return activeMems(p).map(m => {
       const v = cc[m.cid], g = v && v.msg;
       if (!g || !g.text || g.t <= (seen[m.cid] || 0) || Date.now() - g.t > 14 * DAY) return '';
-      return `<section class="px-msg sc-cmsg" role="status"><span class="px-msg-ic" aria-hidden="true">📣</span><div><small>رسالة من ${esc(v.teacher || 'معلمك')}</small><p>${esc(g.text)}</p></div><button type="button" class="btn small" data-cmsg="${esc(m.cid)}|${g.t}">تم 👍</button></section>`;
+      return `<section class="px-msg sc-cmsg" role="status"><span class="px-msg-ic" aria-hidden="true">📣</span><div><small>${g.by ? 'إعلان من ' + esc(g.by) : 'رسالة من ' + esc(v.teacher || 'معلمك')}</small><p>${esc(g.text)}</p></div><button type="button" class="btn small" data-cmsg="${esc(m.cid)}|${g.t}">تم 👍</button></section>`;
     }).join('');
   }
   function bindStudent(p) {

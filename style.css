@@ -1513,3 +1513,36 @@ h1{font-weight:900}h2{font-weight:800}
 .sc-class.warn{border-color:#f5b26b}
 .sc-down{color:var(--bad);font-weight:800}
 .sc-cmsg{background:linear-gradient(135deg,var(--brand-soft),var(--chip))}
+
+/* ===== لوحة حساب المدرسة + التقرير الشهري + لوحة الشرف ===== */
+.sd-root{display:flex;flex-direction:column;gap:16px;margin-bottom:16px}
+.sd-actions{justify-content:flex-start}
+.sd-rank{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.sd-rank>div{background:var(--chip);border-radius:14px;padding:10px 6px;display:flex;flex-direction:column}
+.sd-rank b{font-family:var(--f-head);font-size:1.8rem;color:var(--brand);line-height:1.3}
+.sd-rank small{color:var(--muted);font-size:.8rem}
+.sd-gap{margin:10px 0 0;padding:10px 14px;border-radius:12px;background:var(--brand-soft)}
+tr.sd-down td{background:#fff1e6}
+tr.sd-quiet td{color:var(--muted)}
+.sdr{color:#1c2430;font-family:'Tajawal',sans-serif}
+.sdr h3{font-family:'Cairo',sans-serif;color:#0f766e;border-bottom:2px solid #0f766e;padding-bottom:3px;margin:18px 0 8px;font-size:1.05rem}
+.sdr table{width:100%;border-collapse:collapse;font-size:.9rem}
+.sdr th,.sdr td{text-align:right;padding:5px 8px;border-bottom:1px solid #e1e4dc}
+.sdr th{background:#f3f4ef}
+.sdr tr{break-inside:avoid}
+.sdr-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
+.sdr-kpis div{border:1px solid #e1e4dc;border-radius:10px;padding:8px;text-align:center;display:flex;flex-direction:column}
+.sdr-kpis b{font-size:1.4rem;font-family:'Cairo',sans-serif}
+.sdr-kpis small{color:#5f6b72}
+.sdp{font-family:'Tajawal',sans-serif;color:#10233f;text-align:center;border:6px double #0f766e;border-radius:18px;padding:28px 22px;background:linear-gradient(180deg,#f2faf6,#fff 40%)}
+.sdp-top h1{font-family:'Cairo',sans-serif;font-weight:900;font-size:2.6rem;margin:6px 0 0;color:#0f766e}
+.sdp-top p{margin:4px 0 18px;font-size:1.15rem;font-weight:700;color:#4b5d6b}
+.sdp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+.sdp-g{border:2px solid #f2c94c;border-radius:16px;padding:12px;background:#fffdf3;break-inside:avoid}
+.sdp-g h2{font-family:'Cairo',sans-serif;margin:0 0 8px;font-size:1.25rem}
+.sdp-g ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.sdp-g li{display:flex;align-items:center;gap:8px;font-size:1.1rem;text-align:start}
+.sdp-g li span{font-size:1.5rem}
+.sdp-g li small{margin-inline-start:auto;color:#4b5d6b}
+.sdp-foot{margin:20px 0 0;color:#4b5d6b;font-weight:700}
+@media (max-width:600px){ .sd-rank{grid-template-columns:1fr} .sdr-kpis{grid-template-columns:repeat(2,1fr)} }
