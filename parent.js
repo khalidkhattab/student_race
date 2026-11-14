@@ -171,7 +171,8 @@
     const G = Gm(), BL = G && G._badges ? G._badges() : [];
     const rows = people.map(p => {
       const bits = [], rs = p.records.filter(r => r.date > since);
-      if (rs.length) bits.push(`حلّ ${num(rs.length)} ${rs.length === 1 ? 'اختباراً' : 'اختبارات'} بمتوسط ${num(avgOf(rs))}٪`);
+      const n = rs.length;
+      if (n) bits.push(`حلّ ${n === 1 ? 'اختباراً واحداً' : n === 2 ? 'اختبارين' : num(n) + (n <= 10 ? ' اختبارات' : ' اختباراً')} بمتوسط ${num(avgOf(rs))}٪`);
       const done = (p.tasks || []).filter(t => { const st = taskStatus(p, t); return st.done && ((st.rec && st.rec.date > since) || (t.doneAt && t.doneAt > since)); });
       if (done.length) bits.push(done.length === 1 ? `أنهى واجب «${esc(done[0].title)}»` : `أنهى ${num(done.length)} واجبات`);
       if (p.msg && p.msg.seen > since) bits.push(`قرأ رسالتك ✓${p.msg.re ? ' وردّ ' + esc(p.msg.re) : ''}`);
