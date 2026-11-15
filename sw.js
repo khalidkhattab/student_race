@@ -1,5 +1,5 @@
 /* يجعل الموقع يعمل بدون إنترنت ويفتح بسرعة. غيّر VERSION عند كل نشر ليحصل الجميع على النسخة الجديدة. */
-const VERSION = 'nq-20261116a';
+const VERSION = 'nq-20261116b';
 const SHELL = ['./', './index.html', './style.css', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -21,6 +21,8 @@ self.addEventListener('fetch', e => {
   const sameOrigin = url.origin === location.origin;
   const isFont = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
   if (!sameOrigin && !isFont) return;
+  // الفيديو يُشغَّل من الشبكة مباشرة (طلبات جزئية للتقديم والتأخير) ولا يُحفظ في التخزين المؤقت
+  if (url.pathname.endsWith('.mp4') || req.headers.has('range')) return;
   // باقي الملفات: من المحفوظ فوراً، مع تحديثه في الخلفية
   e.respondWith(caches.open(VERSION).then(async cache => {
     const hit = await cache.match(req);

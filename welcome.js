@@ -29,6 +29,13 @@
     parent: [['تابع أبناءك', 'من أي جهاز برابط الأسرة'], ['أرسل واجبات', 'ورسائل تشجيع ومكافآت'], ['تقرير أسبوعي', 'جاهز للطباعة والمشاركة'], ['نظّم المذاكرة', 'بأوقات ومواعيد امتحانات']],
     teacher: [['أنشئ فصولك', 'وادعُ أولياء الأمور برابط'], ['تقارير مادتك', 'لكل طالب بإذن ولي الأمر'], ['أكثر الأسئلة خطأً', 'في الفصل خلال الشهر'], ['ترتيب المدرسة', 'لكل صف ومرحلة']]
   };
+  // فيديوهات تعريفية (ملفات media/): [المعرّف, عنوان التبويب, الوصف, عمودي؟, المدة]
+  const VIDEOS = [
+    ['parents', 'لأولياء الأمور', 'تابع مذاكرة ابنك من جوالك، واعرف أين يحتاج مساعدة قبل الامتحان.', true, '٠:٣٠'],
+    ['students', 'للطلاب', 'كل إجابة صحيحة نقاط وأوسمة، ونافس فصلك ومدرستك.', true, '٠:٢٠'],
+    ['before-after', 'قبل وبعد', 'الفرق بين المذاكرة من الكتاب وحدها والمذاكرة مع قِمّة.', true, '٠:١٦'],
+    ['schools', 'للمدارس', 'جولة كاملة في المنصة: الطالب وولي الأمر والمعلم والمدرسة.', false, '١:٢٤']
+  ];
   const ROLE_NAMES = [['student', 'الطالب'], ['parent', 'ولي الأمر'], ['teacher', 'المعلم']];
 
   const FAQ = [
@@ -114,6 +121,12 @@
     </ol>
   </section>
 
+  <section class="lp-sec lp-videos" aria-labelledby="lp-vid-h">
+    <h2 id="lp-vid-h">شاهد قِمّة في أقل من دقيقة</h2>
+    <div class="lp-tabs" role="tablist" aria-label="اختر الفيديو">${VIDEOS.map(([id, t], i) => `<button type="button" role="tab" aria-selected="${i === 0}" class="${i === 0 ? 'on' : ''}" data-vid="${id}">${t}</button>`).join('')}</div>
+    <div class="lp-vid" id="lp-vid" role="tabpanel"></div>
+  </section>
+
   <section class="lp-sec lp-subjects">
     <h2>المواد المتاحة</h2>
     <div class="lp-tabs" role="tablist" aria-label="اختر الصف">${CAT.gradeNames.map((g, i) => `<button type="button" role="tab" aria-selected="${i === CAT.gradeNames.length - 1}" class="${i === CAT.gradeNames.length - 1 ? 'on' : ''}" data-sg="${esc(g)}">${esc(g)}</button>`).join('')}</div>
@@ -140,6 +153,23 @@
   <footer class="lp-foot">قِمّة · اختبارات المنهج الكويتي · <a href="#parent">ولي الأمر</a> · <a href="#staff">المعلمون والمدارس</a></footer>
 </div>`;
   };
+
+  // مشغّل الفيديو: ملف واحد في كل مرة، ولا يُحمَّل إلا عند الضغط على تشغيل
+  function videos(root) {
+    const box = root.querySelector('#lp-vid'); if (!box) return;
+    const show = id => {
+      const old = box.querySelector('video'); if (old) { old.pause(); old.removeAttribute('src'); old.load(); }
+      const [, t, d, tall, dur] = VIDEOS.find(v => v[0] === id);
+      box.className = 'lp-vid ' + (tall ? 'tall' : 'wide');
+      box.innerHTML = `<div class="lp-vid-frame"><video controls playsinline preload="none" poster="media/promo-${id}.jpg" src="media/promo-${id}.mp4" aria-label="فيديو قِمّة ${esc(t)}"></video></div>
+        <div class="lp-vid-txt"><b>${esc(t)}</b><p>${esc(d)}</p><small>⏱ ${dur}</small></div>`;
+    };
+    root.querySelectorAll('[data-vid]').forEach(b => b.onclick = () => {
+      root.querySelectorAll('[data-vid]').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', String(x === b)); });
+      show(b.dataset.vid);
+    });
+    show(VIDEOS[0][0]);
+  }
 
   // تشغيل الاختبار التجريبي والتبويبات بعد عرض الصفحة
   // أسئلة عشوائية من صف الزائر: سؤال من كل مادة قدر الإمكان، والخيارات مخلوطة
@@ -217,6 +247,7 @@
       showRole(b.dataset.role);
     });
     showRole('student');
+    videos(root);
     welcomeBack(root);
     subjectsGrid(root);
     installBtn(root);
