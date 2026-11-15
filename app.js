@@ -280,10 +280,19 @@
       <label class="sr" for="fjc">كود الأسرة</label>
       <input id="fjc" class="gm-code-in" dir="ltr" autocomplete="off" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" maxlength="30" required>
       <p class="err" id="fje" role="alert"></p>
-      <div class="actions"><button type="button" class="btn ghost" data-x>إلغاء</button><button class="btn" type="submit">ربط ←</button></div></form>`;
+      <div class="actions"><button type="button" class="btn ghost" data-x>إلغاء</button><button class="btn" type="submit">ربط ←</button></div>
+      ${acctOk() ? `<div class="fj-acct"><div class="sc-or"><span>أو</span></div>
+        <p class="muted" style="margin:0">ربطتَ الأسرة بحسابك من قبل؟ ادخل به لتعود كل البيانات بدون كود.</p>
+        <div class="sc-provs">${window.NQSchools.providerBtns('data-fprov')}</div></div>` : ''}</form>`;
     document.body.appendChild(ov);
     const inp = ov.querySelector('#fjc'); inp.focus();
     ov.querySelector('[data-x]').onclick = () => ov.remove();
+    ov.querySelectorAll('[data-fprov]').forEach(b => b.onclick = async () => {
+      const err = ov.querySelector('#fje'); err.textContent = '⏳';
+      const r = await acctSignIn(b.dataset.fprov);
+      if (r === 'recovered' || r === 'linked') { ov.remove(); toast(r === 'recovered' ? 'تمت استعادة حساب الأسرة ✓' : 'تم ربط أسرة هذا الجهاز بحسابك ✓'); route(); return; }
+      err.textContent = r;
+    });
     ov.querySelector('form').onsubmit = async e => {
       e.preventDefault(); const err = ov.querySelector('#fje'); err.textContent = '⏳ جارٍ الربط…';
       const r = await joinFamily(inp.value);
@@ -323,6 +332,26 @@
     try { if (!(await F.exists(c))) return 'missing'; } catch (e) { return 'net'; }
     F.join(c); cloud = null; await initCloud(); return cloud ? 'ok' : 'net';
   }
+  // حساب ولي الأمر: الدخول ثم ربط الأسرة به، أو استعادة الأسرة المربوطة به من قبل
+  const acctOk = () => !!(window.NQFamily && window.NQFamily.canAccount && window.NQFamily.canAccount());
+  async function acctSignIn(kind) {
+    const F = window.NQFamily;
+    try { await F.signIn(kind); } catch (e) { return window.NQSchools.authErr(e); }
+    try {
+      const r = await F.link();
+      if (r.other) {
+        F.join(r.other); cloud = null; await initCloud();
+        if (!cloud) return 'تعذّر الاتصال. حاول مرة أخرى.';
+        await F.link(); return 'recovered';
+      }
+      return 'linked';
+    } catch (e) { return e && e.code === 'http_403' ? 'ليس لديك صلاحية على هذه الأسرة.' : 'تعذّر الاتصال. تأكد من الإنترنت وحاول مرة أخرى.'; }
+  }
+  // ولي الأمر غيّر رابط الأسرة: هذا الجهاز لم يعد مربوطاً (بياناته المحلية باقية)
+  addEventListener('nq-family-gone', () => setTimeout(() => {
+    if (!window.NQFamily.takeGoneNotice()) return;
+    ask('ولي الأمر غيّر رابط الأسرة، فلم يعد هذا الجهاز مربوطاً بها. درجات هذا الجهاز ما زالت محفوظة عليه. اطلب من ولي الأمر رابط الربط الجديد.', 'حسناً');
+  }, 0));
   function refreshSync() {
     const el = document.getElementById('sync');
     if (el) el.textContent = cloud ? (cloudKind === 'family' ? '☁️ درجاتك محفوظة في حساب الأسرة وتظهر على كل أجهزتها' : '☁️ درجاتك محفوظة في حسابك وتظهر على أي جهاز') : '💾 درجاتك محفوظة على هذا الجهاز';
@@ -2417,7 +2446,7 @@
   window.NQ = {
     store, cur, persist, SUBJECTS, GRADES, allQuestions, subjectById, gradeOf, esc, toast, ask, go, route,
     startQuiz, openStart, printWorksheet: renderPrintWorksheet, records, respText, correctText, qImg, hashPin, avatarHtml, AVATARS, fmtDate, fmtTime, shuffle, newId, subjectStats, streakDays, validPin, weakPin, digitsOnly, pinInput,
-    joinFamily, familyJoinDialog, syncNow: () => initCloud(), get cloudKind() { return cloudKind; }, get synced() { return !!cloud; },
+    joinFamily, familyJoinDialog, acctSignIn, acctOk, syncNow: () => initCloud(), get cloudKind() { return cloudKind; }, get synced() { return !!cloud; },
     get grade() { return curGrade; }, renderHome: () => renderHome(), app: $app,
     openPomodoro, startFlashcards, renderPrintWorksheet, NQSound, NQTheme
   };

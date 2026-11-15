@@ -1546,3 +1546,15 @@ tr.sd-quiet td{color:var(--muted)}
 .sdp-g li small{margin-inline-start:auto;color:#4b5d6b}
 .sdp-foot{margin:20px 0 0;color:#4b5d6b;font-weight:700}
 @media (max-width:600px){ .sd-rank{grid-template-columns:1fr} .sdr-kpis{grid-template-columns:repeat(2,1fr)} }
+
+/* ===== حساب ولي الأمر (Google / Microsoft) ===== */
+.sc-provs{display:flex;flex-direction:column;gap:10px}
+.px-fam-acts.sc-provs{flex-direction:row;flex-wrap:wrap}
+.sc-ms{justify-content:center;gap:10px;min-height:48px;background:var(--card);color:var(--ink);border:1.5px solid var(--line)}
+.sc-ms:hover{background:var(--brand-soft)}
+.px-acct{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:16px 20px;border-inline-start:4px solid var(--accent)}
+.px-acct.on{border-inline-start-color:var(--ok)}
+.px-acct .err{flex-basis:100%;margin:0}
+.px-acct .err:empty{display:none}
+.px-acct .px-fam-info{flex:1 1 280px}
+.fj-acct{display:flex;flex-direction:column;gap:10px;margin-top:6px}

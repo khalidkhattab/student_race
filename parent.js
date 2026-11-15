@@ -634,7 +634,42 @@
         <button type="button" class="linkish" id="fam-other">عندي كود من جهاز آخر</button>
         <button type="button" class="btn" id="fam-open">+ ربط جهاز جديد</button>
       </div>
-    </section>`;
+    </section>${acctHtml()}`;
+  }
+  // ربط الأسرة بحساب ولي الأمر (اختياري): استعادة على أي جهاز + إمكانية إلغاء الروابط القديمة
+  function acctHtml() {
+    const F = window.NQFamily, NQ = N();
+    if (!NQ.acctOk || !NQ.acctOk()) return '';
+    const a = F.account();
+    if (a) return `<section class="card px-acct on">
+      <div class="px-fam-info"><b>🔐 حساب الأسرة محفوظ في حسابك</b><small>مربوط بـ <bdi dir="ltr">${esc(a.e || a.n)}</bdi>. على أي جهاز جديد ادخل بنفس الحساب من «ربط هذا الجهاز بحساب الأسرة» لتعود كل البيانات.</small></div>
+      <div class="px-fam-acts"><button type="button" class="linkish" id="acct-out">تسجيل الخروج</button><button type="button" class="btn ghost" id="acct-rotate">تغيير رابط الأسرة</button></div>
+      <p class="err" id="acct-err" role="alert"></p></section>`;
+    return `<section class="card px-acct">
+      <div class="px-fam-info"><b>🔐 احمِ درجات أبنائك من الضياع</b><small>اربط حساب الأسرة بحسابك، فتستعيد كل البيانات على أي جهاز جديد بدون كود، وتستطيع إلغاء الروابط القديمة. لا يحتاج الطلاب أي حساب.</small></div>
+      <div class="px-fam-acts sc-provs">${window.NQSchools.providerBtns('data-aprov', true)}</div>
+      <p class="err" id="acct-err" role="alert"></p></section>`;
+  }
+  function bindAcct() {
+    const F = window.NQFamily, NQ = N(), err = document.getElementById('acct-err');
+    document.querySelectorAll('[data-aprov]').forEach(b => b.onclick = async () => {
+      err.textContent = '⏳ جارٍ الربط…';
+      const r = await NQ.acctSignIn(b.dataset.aprov);
+      if (r === 'recovered' || r === 'linked') { NQ.toast(r === 'recovered' ? 'تمت استعادة حساب الأسرة المربوط بحسابك ✓' : 'تم ربط حساب الأسرة بحسابك ✓'); NQ.route(); return; }
+      err.textContent = r;
+    });
+    const out = document.getElementById('acct-out');
+    if (out) out.onclick = async () => {
+      if (!(await NQ.ask('تسجيل الخروج من هذا الجهاز فقط. بيانات الأسرة تبقى كما هي، وتبقى مربوطة بحسابك لاستعادتها لاحقاً.', 'تسجيل الخروج'))) return;
+      await F.signOut(); NQ.route();
+    };
+    const rot = document.getElementById('acct-rotate');
+    if (rot) rot.onclick = async () => {
+      if (!(await NQ.ask('سيتوقف كل رابط أو كود أسرة أُرسل من قبل، وتنفصل كل الأجهزة المربوطة عدا الأجهزة التي تدخل بحسابك. بعدها أرسل رابط الربط الجديد لأجهزة أبنائك. هل تريد المتابعة؟', 'تغيير الرابط', true))) return;
+      err.textContent = '⏳ جارٍ تغيير الرابط…'; rot.disabled = true;
+      try { await F.rotate(); NQ.persist(); NQ.toast('تم تغيير رابط الأسرة ✓ أرسل الرابط الجديد لأجهزة الأسرة'); NQ.route(); }
+      catch (e) { rot.disabled = false; err.textContent = e && e.code === 'http_403' ? 'ليس لديك صلاحية على هذه الأسرة. سجّل الخروج ثم ادخل بالحساب المربوط بها.' : 'تعذّر تغيير الرابط. تأكد من الإنترنت وحاول مرة أخرى.'; }
+    };
   }
   const ICO = {
     near: '<svg aria-hidden="true" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>',
@@ -715,6 +750,7 @@
     const F = window.NQFamily; if (!F || !F.enabled()) return;
     const op = document.getElementById('fam-open'); if (op) op.onclick = openLinkWindow;
     const ot = document.getElementById('fam-other'); if (ot) ot.onclick = () => N().familyJoinDialog();
+    bindAcct();
   }
 
   const api = { view: null, showDetails, familyHtml, bindFamily, homeHtml, bindHome, blocked, alerts, kidHtml, bindKid, renderReport, trimDetails, merge, whatsNewHtml, guideHtml, bindGuide, mistakesSheet, openTasks, taskStatus, dueTxt, upcoming, examPlan };

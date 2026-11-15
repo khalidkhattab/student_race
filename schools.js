@@ -62,6 +62,17 @@
     }).catch(e => { authP = null; throw e; });
     return authP;
   }
+  // طرق الدخول المفعّلة: google دائماً، وmicrosoft بعد إعدادها في Firebase (providers في firebase-config.js)
+  const providers = () => { const p = (cfg() && cfg().providers) || ['google']; return ['google', 'microsoft'].filter(k => p.includes(k)); };
+  function provider(kind) {
+    const fb = window.firebase.auth;
+    if (kind === 'microsoft') { const p = new fb.OAuthProvider('microsoft.com'); p.setCustomParameters({ prompt: 'select_account' }); return p; }
+    const g = new fb.GoogleAuthProvider(); g.setCustomParameters({ prompt: 'select_account' }); return g;
+  }
+  const MS_ICO = '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><path fill="#f25022" d="M2 2h9.5v9.5H2z"/><path fill="#7fba00" d="M12.5 2H22v9.5h-9.5z"/><path fill="#00a4ef" d="M2 12.5h9.5V22H2z"/><path fill="#ffb900" d="M12.5 12.5H22V22h-9.5z"/></svg>';
+  const G_ICO = '<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><path fill="#fff" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 01-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3z"/><path fill="#fff" opacity=".85" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0012 22z"/></svg>';
+  const providerBtns = (attr, short) => { const ms = short && providers().includes('microsoft'); return `<button type="button" class="btn sc-google" ${attr}="google">${G_ICO}${ms ? 'Google' : 'الدخول بحساب Google'}</button>`
+    + (providers().includes('microsoft') ? `<button type="button" class="btn sc-ms" ${attr}="microsoft">${MS_ICO}${ms ? 'Microsoft' : 'الدخول بحساب Microsoft'}</button>` : ''); };
   // للطلاب (بلا تسجيل) لا نحمّل مكتبة الدخول أصلاً
   async function signedUser() { if (!authP) return null; try { const a = await authP; return a.currentUser; } catch (e) { return null; } }
 
@@ -127,7 +138,7 @@
     app.innerHTML = page('🏫 دخول المعلمين والمدارس', intro || 'سجّل الدخول بحساب جوجل أو بالبريد الإلكتروني.', `
       <div class="sc-grid2">
         <section class="card sc-signin">
-          <button type="button" class="btn sc-google" id="sc-g"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24"><path fill="#fff" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 01-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3z"/><path fill="#fff" opacity=".85" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0012 22z"/></svg>الدخول بحساب Google</button>
+          <div class="sc-provs">${providerBtns('data-prov')}</div>
           <div class="sc-or"><span>أو بالبريد</span></div>
           <form id="sc-ef" class="px-form">
             <label class="wide"><span>البريد الإلكتروني</span><input type="email" id="sc-em" autocomplete="email" required dir="ltr"></label>
@@ -143,11 +154,11 @@
       </div>`);
     const err = document.getElementById('sc-err');
     const done = () => next();
-    document.getElementById('sc-g').onclick = async () => {
+    document.querySelectorAll('[data-prov]').forEach(b => b.onclick = async () => {
       err.textContent = '';
-      try { const a = await auth(); await a.signInWithPopup(new window.firebase.auth.GoogleAuthProvider()); done(); }
+      try { const a = await auth(); await a.signInWithPopup(provider(b.dataset.prov)); done(); }
       catch (e) { err.textContent = authErr(e); }
-    };
+    });
     let mode = 'in';
     document.querySelectorAll('#sc-ef [data-mode]').forEach(b => b.onclick = () => { mode = b.dataset.mode; });
     document.getElementById('sc-ef').onsubmit = async e => {
@@ -161,6 +172,9 @@
     const c = (e && e.code) || '';
     if (/popup-closed|cancelled/.test(c)) return '';
     if (/wrong-password|invalid-credential|user-not-found|invalid-login/.test(c)) return 'البريد أو كلمة المرور غير صحيحة.';
+    if (/popup-blocked/.test(c)) return 'المتصفح منع نافذة الدخول. اسمح بالنوافذ المنبثقة لهذا الموقع ثم حاول مرة أخرى.';
+    if (/account-exists-with-different-credential/.test(c)) return 'هذا البريد مسجّل بطريقة دخول أخرى. ادخل بالطريقة التي استخدمتها أول مرة.';
+    if (/network-request-failed/.test(c)) return 'تعذّر الاتصال. تأكد من الإنترنت وحاول مرة أخرى.';
     if (/email-already-in-use/.test(c)) return 'هذا البريد مسجّل بالفعل، اختر «دخول».';
     if (/weak-password/.test(c)) return 'كلمة المرور قصيرة (6 أحرف على الأقل).';
     if (/unauthorized-domain|operation-not-allowed/.test(c)) return 'طريقة الدخول هذه غير مفعّلة بعد في إعدادات المنصة.';
@@ -908,5 +922,5 @@
     return false;
   }
 
-  window.NQSchools = { enabled, route, parentHtml, bindParent, onPersist, merge, primary, stageOf, classTasks, studentHtml, bindStudent, REGIONS, STAGES, ALL_GRADES, _db: db };
+  window.NQSchools = { enabled, route, parentHtml, bindParent, onPersist, merge, primary, stageOf, classTasks, studentHtml, bindStudent, REGIONS, STAGES, ALL_GRADES, _db: db, auth, signedUser, provider, providers, providerBtns, authErr };
 })();
