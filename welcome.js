@@ -161,7 +161,7 @@
       const old = box.querySelector('video'); if (old) { old.pause(); old.removeAttribute('src'); old.load(); }
       const [, t, d, tall, dur] = VIDEOS.find(v => v[0] === id);
       box.className = 'lp-vid ' + (tall ? 'tall' : 'wide');
-      box.innerHTML = `<div class="lp-vid-frame"><video controls playsinline preload="none" poster="media/promo-${id}.jpg" src="media/promo-${id}.mp4" aria-label="فيديو قِمّة ${esc(t)}"></video></div>
+      box.innerHTML = `<div class="lp-vid-frame"><video controls playsinline preload="none" poster="media/promo-${id}.jpg" src="media/promo-${id}.mp4?v=2" aria-label="فيديو قِمّة ${esc(t)}"></video></div>
         <div class="lp-vid-txt"><b>${esc(t)}</b><p>${esc(d)}</p><small>⏱ ${dur}</small></div>`;
     };
     root.querySelectorAll('[data-vid]').forEach(b => b.onclick = () => {
