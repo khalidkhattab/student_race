@@ -753,7 +753,7 @@
 
   /* ----- 1) نظرة على الأسرة ----- */
   let parentKid = null, parentSince = null, newHidden = false, parentTab = 'overview';
-  const PTABS = [['overview', '📊 نظرة عامة'], ['tasks', '📌 الواجبات والامتحانات'], ['tests', '📝 الاختبارات'], ['cheer', '💌 التشجيع والمكافآت'], ['settings', '⚙️ الإعدادات']];
+  const PTABS = [['overview', '📊 نظرة عامة'], ['tasks', '📌 الواجبات'], ['exams', '📅 جدول الاختبارات'], ['tests', '📝 نتائج الاختبارات'], ['cheer', '💌 التشجيع والمكافآت'], ['settings', '⚙️ الإعدادات']];
   function renderParentHome(people) {
     const NQ = N(), app = NQ.app;
     const sums = people.map(p => ({ p, k: kidSummary(p) }));
@@ -866,7 +866,10 @@
         ${XP.badges || ''}
         </div>
         <div class="px-panel" role="tabpanel" id="pp-tasks" aria-labelledby="pt-tasks" ${parentTab === 'tasks' ? '' : 'hidden'}>
-          ${XP.tasks || ''}${XP.exams || ''}
+          ${XP.tasks || ''}
+        </div>
+        <div class="px-panel" role="tabpanel" id="pp-exams" aria-labelledby="pt-exams" ${parentTab === 'exams' ? '' : 'hidden'}>
+          ${XP.exams || ''}
         </div>
         <div class="px-panel" role="tabpanel" id="pp-tests" aria-labelledby="pt-tests" ${parentTab === 'tests' ? '' : 'hidden'}>
           ${XP.recent || ''}

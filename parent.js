@@ -112,6 +112,82 @@
   }
   const upcoming = p => (p.exams || []).filter(e => daysTo(e.date) >= 0).sort((a, b) => a.date < b.date ? -1 : 1);
 
+  /* ================= جدول الاختبارات (ولي الأمر يضيف، والطالب يستعرض أو يعدّل حسب الصلاحية) ================= */
+  const examPerm = p => p.examPerm === 'edit' ? 'edit' : 'view';
+  const inDays = d => d === 0 ? 'اليوم' : d === 1 ? 'غداً' : d === 2 ? 'بعد يومين' : d > 0 ? 'بعد ' + num(d) + (d <= 10 ? ' أيام' : ' يوماً') : d === -1 ? 'أمس' : 'منذ ' + num(-d) + (-d <= 10 ? ' أيام' : ' يوماً');
+  function delExam(p, id) {
+    p.exams = (p.exams || []).filter(x => x.id !== id);
+    p.examsDel = [...new Set([...(p.examsDel || []), id])].slice(-150);
+  }
+  function scheduleHtml(p, who) {
+    const NQ = N(), edit = who === 'parent' || examPerm(p) === 'edit', fn = esc(String(p.name || '').split(' ')[0]);
+    const subs = NQ.SUBJECTS.filter(s => s.grade === p.grade);
+    const all = (p.exams || []).slice().sort((a, b) => examAt(a) - examAt(b));
+    const next = all.filter(e => daysTo(e.date) >= 0), past = all.filter(e => daysTo(e.date) < 0).reverse();
+    const row = (e, old) => {
+      const s = NQ.subjectById(e.sid), pl = old ? null : examPlan(p, e), d = daysTo(e.date);
+      const n = pl ? pl.left.length : 0;
+      const ready = pl ? (n ? num(n) + ' ' + (n === 1 ? 'درس يحتاج' : n <= 10 ? 'دروس تحتاج' : 'درساً يحتاج') + ' مراجعة' : 'كل الدروس متقنة ✓') : '';
+      return `<tr class="${old ? 'old' : d <= 2 ? 'soon' : ''}">
+        <td><b>${esc(fdate(e.date))}</b><small>${inDays(d)}</small></td>
+        <td><span class="xs-sub">${s ? s.icon + ' ' + esc(s.name) : 'مادة'}</span>${e.note ? `<small class="xs-note">${esc(e.note)}</small>` : ''}${who === 'parent' && e.by === 'student' ? '<small class="xs-by">أضافه الطالب</small>' : ''}</td>
+        <td>${timeTxt(e)}</td>
+        <td class="xs-ready">${old ? '—' : `<small>${ready}</small>${pl && pl.level != null ? `<small class="muted">المستوى ${num(pl.level)}٪</small>` : ''}`}</td>
+        ${edit ? `<td><button type="button" class="linkish" data-xsdel="${esc(e.id)}" aria-label="حذف اختبار ${s ? esc(s.name) : ''}">حذف</button></td>` : ''}</tr>`;
+    };
+    const head = `<thead><tr><th>الموعد</th><th>المادة</th><th>الساعة</th><th>الاستعداد</th>${edit ? '<th><span class="sr">حذف</span></th>' : ''}</tr></thead>`;
+    const pv = examPerm(p);
+    const perm = who === 'parent' ? `<div class="xs-perm"><span>صلاحية ${fn} على الجدول:</span>
+      <div class="segs" role="group" aria-label="صلاحية الطالب"><button type="button" class="seg${pv === 'view' ? ' on' : ''}" aria-pressed="${pv === 'view'}" data-xsperm="view">👁️ عرض فقط</button><button type="button" class="seg${pv === 'edit' ? ' on' : ''}" aria-pressed="${pv === 'edit'}" data-xsperm="edit">✏️ عرض وتعديل</button></div></div>` : '';
+    const form = edit ? `<form class="px-form xs-form" id="xs-add">
+        <label><span>المادة</span><select id="xs-s" required>${subs.map(s => `<option value="${s.id}">${s.icon} ${esc(s.name)}</option>`).join('')}</select></label>
+        <label><span>تاريخ الاختبار</span><input type="date" id="xs-d" min="${ymd()}" required></label>
+        <label><span>الساعة</span><input type="time" id="xs-t" value="08:00" required></label>
+        <label class="wide"><span>الدروس المقررة (اختياري)</span><input id="xs-n" maxlength="80" placeholder="مثال: الوحدة الأولى والثانية"></label>
+        <button class="btn" type="submit">إضافة إلى الجدول</button></form>` : '';
+    const sub = who === 'parent' ? `يظهر لـ${fn} في صفحته مع عدّاد تنازلي وخطة مراجعة يومية للدروس التي لم يتقنها`
+      : edit ? 'يمكنك إضافة مواعيد اختباراتك وتعديلها' : 'يضيف ولي أمرك مواعيد اختباراتك هنا، وتظهر لك خطة مراجعة لكل اختبار';
+    return `<section class="card px-card xs-card">
+      <div class="xs-head"><div><h2>📅 جدول الاختبارات</h2><small class="muted">${sub}</small></div>
+        ${who === 'student' ? `<span class="xs-badge">${edit ? '✏️ يمكنك التعديل' : '👁️ للعرض فقط'}</span>` : ''}</div>
+      ${perm}
+      ${next.length ? `<div class="xs-wrap"><table class="xs-table">${head}<tbody>${next.map(e => row(e, false)).join('')}</tbody></table></div>`
+        : `<p class="empty">${edit ? 'لا توجد اختبارات قادمة. أضف أول موعد من النموذج بالأسفل.' : 'لا توجد اختبارات قادمة في الجدول.'}</p>`}
+      ${past.length ? `<details class="xs-past"><summary>الاختبارات السابقة (${num(past.length)})</summary><div class="xs-wrap"><table class="xs-table">${head}<tbody>${past.map(e => row(e, true)).join('')}</tbody></table></div></details>` : ''}
+      ${form}
+    </section>`;
+  }
+  function bindSchedule(p, who, rerender) {
+    const NQ = N(), edit = who === 'parent' || examPerm(p) === 'edit';
+    if (who === 'parent') document.querySelectorAll('[data-xsperm]').forEach(b => b.onclick = () => {
+      p.examPerm = b.dataset.xsperm; p.examPermT = Date.now(); NQ.persist();
+      NQ.toast(p.examPerm === 'edit' ? 'أصبح بإمكان الطالب تعديل الجدول ✓' : 'الطالب يستعرض الجدول فقط ✓'); rerender();
+    });
+    if (!edit) return;
+    const f = document.getElementById('xs-add');
+    if (f) f.onsubmit = e => {
+      e.preventDefault();
+      const sid = document.getElementById('xs-s').value, d = document.getElementById('xs-d').value, tm = document.getElementById('xs-t').value || '08:00';
+      const note = document.getElementById('xs-n').value.trim().slice(0, 80);
+      if (!sid || !d || daysTo(d) < 0) { NQ.toast('اختر تاريخاً من اليوم فصاعداً'); return; }
+      if (examAt({ date: d, time: tm }) <= Date.now()) { NQ.toast('هذا الموعد مضى بالفعل'); return; }
+      (p.exams || []).filter(x => x.sid === sid && x.date === d).forEach(x => delExam(p, x.id));
+      const ex = { id: NQ.newId(), sid, date: d, time: tm, by: who, created: Date.now() }; if (note) ex.note = note;
+      p.exams = (p.exams || []).concat(ex).filter(x => daysTo(x.date) > -60);
+      NQ.persist(); NQ.toast('تمت إضافة الاختبار إلى الجدول ✓'); rerender();
+    };
+    document.querySelectorAll('[data-xsdel]').forEach(b => b.onclick = async () => {
+      if (!(await NQ.ask('حذف هذا الاختبار من الجدول؟', 'حذف', true))) return;
+      delExam(p, b.dataset.xsdel); NQ.persist(); rerender();
+    });
+  }
+  // صفحة الطالب: #exams
+  function renderSchedule() {
+    const NQ = N(), p = NQ.cur(); if (!p) return;
+    NQ.app.innerHTML = `<header class="pg-head"><div><h1>جدول الاختبارات</h1><p class="sub">مواعيد اختباراتك وخطة المراجعة لكل منها</p></div></header>${scheduleHtml(p, 'student')}`;
+    bindSchedule(p, 'student', () => NQ.route());
+  }
+
   /* ================= صفحة الطالب ================= */
   const REACTS = ['❤️', '👍', '😊', '🙏'];
   function homeHtml(p, part) {
@@ -126,7 +202,7 @@
     if (part === 'top') return h;
     // واجبات ولي الأمر تظهر الآن داخل بطاقة «خطة اليوم» أعلى الصفحة
     const ex = upcoming(p).map(e => ({ e, pl: examPlan(p, e) })).filter(x => x.pl);
-    if (ex.length) h += `<section class="card px-exams"><h2>📅 امتحاناتي القادمة</h2>${ex.map(({ e, pl }) => `<div class="px-exam col">
+    if (ex.length) h += `<section class="card px-exams"><div class="pg-row"><h2>📅 امتحاناتي القادمة</h2><a class="linkish" href="#exams">الجدول كاملاً ←</a></div>${ex.map(({ e, pl }) => `<div class="px-exam col">
         <div class="px-exam-body"><b>${pl.s.icon} ${esc(pl.s.name)}</b>
           <small>${examWhen(e)} · ${pl.left.length ? `باقي ${num(pl.left.length)} ${pl.left.length === 1 ? 'درس يحتاج' : 'دروس تحتاج'} مراجعة` : 'راجعت كل الدروس 👏'}</small>
           ${cdHtml(examAt(e))}
@@ -211,7 +287,7 @@
       const st = guideSteps(people).find(s => s.id === b.dataset.guide); if (!st) return;
       if (st.go) NQ.go(st.go);
       else if (st.fam) openLinkWindow();
-      else if (people[0]) openKid(people[0].id, st.id === 'exam' ? 'tasks' : 'cheer');
+      else if (people[0]) openKid(people[0].id, st.id === 'exam' ? 'exams' : 'cheer');
     });
   }
 
@@ -364,7 +440,8 @@
           <form class="px-form" id="px-msg"><label class="wide"><span class="sr">نص الرسالة</span><textarea id="px-mt" maxlength="140" rows="2" placeholder="اكتب رسالة قصيرة…" required></textarea></label><button class="btn" type="submit">إرسال</button></form>
           <div class="px-emojis" role="group" aria-label="رموز تعبيرية للرسالة">${EMOJIS.map(([g, list]) => `<div class="px-emo-row"><small>${g}</small><div>${list.map(e => `<button type="button" class="px-emo" data-emo="${e}" aria-label="أضف ${e}">${e}</button>`).join('')}</div></div>`).join('')}</div>
         </div>`;
-    parts.exams = `
+    parts.exams = scheduleHtml(p, 'parent');
+    parts.examsOld = `
       <section class="card px-card">
         <h2>📅 مواعيد الامتحانات</h2>
         <small class="muted">يظهر للطالب عدّاد تنازلي وخطة مراجعة يومية للدروس التي لم يتقنها (أقل من 80٪)</small>
@@ -454,7 +531,8 @@
     });
     const mf = document.getElementById('px-msg');
     if (mf) mf.onsubmit = e => { e.preventDefault(); const t = mt.value.trim().slice(0, 140); if (!t) return; p.msg = { text: t, t: Date.now(), seen: null }; NQ.persist(); NQ.toast('تم إرسال الرسالة ✓'); rerender(); };
-    const ef = document.getElementById('px-eadd');
+    bindSchedule(p, 'parent', rerender);
+    const ef = null;
     if (ef) ef.onsubmit = e => {
       e.preventDefault(); const sid = document.getElementById('px-es').value, d = document.getElementById('px-ed').value;
       if (!sid || !d || daysTo(d) < 0) { NQ.toast('اختر تاريخاً من اليوم فصاعداً'); return; }
@@ -465,7 +543,6 @@
       p.exams = p.exams.filter(x => daysTo(x.date) > -30);
       NQ.persist(); NQ.toast('تمت إضافة الامتحان ✓'); rerender();
     };
-    app.querySelectorAll('[data-edel]').forEach(b => b.onclick = () => { p.exams = (p.exams || []).filter(x => x.id !== b.dataset.edel); NQ.persist(); rerender(); });
     app.querySelectorAll('[data-px-report]').forEach(b => b.onclick = () => { api.view = 'report'; rerender(); window.scrollTo(0, 0); });
   }
 
@@ -616,11 +693,14 @@
     if (src.srs) { t.srs = t.srs || {}; Object.entries(src.srs).forEach(([id, e]) => { const m = t.srs[id]; if (!m || (e && e.d > m.d)) t.srs[id] = e; }); }
     if (t.msg && src.msg && src.msg.t === t.msg.t && src.msg.seen && !t.msg.seen) { t.msg.seen = src.msg.seen; if (src.msg.re) t.msg.re = src.msg.re; }
     if (t.msg && src.msg && src.msg.t > t.msg.t) t.msg = src.msg;
+    if (src.examPermT && !(t.examPermT >= src.examPermT)) { t.examPerm = src.examPerm; t.examPermT = src.examPermT; }
+    if (src.examsDel) t.examsDel = [...new Set([...(t.examsDel || []), ...src.examsDel])].slice(-150);
     ['tasks', 'exams', 'routines'].forEach(k => {
       if (!src[k]) return; const have = new Map((t[k] || []).map(x => [x.id, x]));
       src[k].forEach(x => { const m = have.get(x.id); if (!m) have.set(x.id, x); else { if (x.doneAt && !m.doneAt) m.doneAt = x.doneAt; if (x.off && !m.off) m.off = x.off; } });
       t[k] = [...have.values()];
     });
+    if (t.examsDel && t.exams) { const del = new Set(t.examsDel); t.exams = t.exams.filter(x => !del.has(x.id)); }
   }
 
   /* ================= ربط أجهزة الأسرة ================= */
@@ -753,6 +833,6 @@
     bindAcct();
   }
 
-  const api = { view: null, showDetails, familyHtml, bindFamily, homeHtml, bindHome, blocked, alerts, kidHtml, bindKid, renderReport, trimDetails, merge, whatsNewHtml, guideHtml, bindGuide, mistakesSheet, openTasks, taskStatus, dueTxt, upcoming, examPlan };
+  const api = { view: null, showDetails, familyHtml, bindFamily, homeHtml, bindHome, blocked, alerts, kidHtml, bindKid, renderReport, trimDetails, merge, whatsNewHtml, guideHtml, bindGuide, mistakesSheet, openTasks, taskStatus, dueTxt, upcoming, examPlan, scheduleHtml, bindSchedule, renderSchedule };
   window.NQP = api;
 })();

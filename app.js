@@ -508,6 +508,7 @@
     if (h.startsWith('subject-') && subjectById(h.slice(8))) { renderSubject(subjectById(h.slice(8))); return wrapShell('subjects'); }
     if (h === 'subjects') { renderSubjectsPage(); return wrapShell('subjects'); }
     if (h === 'progress') { renderProgress(); return wrapShell('progress'); }
+    if (h === 'exams' && window.NQP) { window.NQP.renderSchedule(); return wrapShell('exams'); }
     if (h === 'records') { renderRecords(); return wrapShell('progress'); }
     if (h === 'achievements' || h === 'badges') { G('renderAchievements'); return wrapShell('achievements'); }
     if (G('route', h)) return wrapShell('arena');
@@ -1152,6 +1153,7 @@
     subjects: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/>',
     progress: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
     achievements: '<circle cx="12" cy="9" r="6"/><path d="M8.5 14L7 22l5-3 5 3-1.5-8"/>',
+    exams: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M8 14h2M14 14h2M8 17h2"/>',
     arena: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0z"/><path d="M17 5h3v2a3 3 0 01-3 3M7 5H4v2a3 3 0 003 3"/>',
     edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
     out: '<path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/>'
@@ -1167,7 +1169,7 @@
       <nav class="sb" aria-label="أقسام صفحة الطالب">
         <div class="sb-me">${avatarHtml(p)}<div><b>${esc(p.name)}</b><small>${esc(p.grade)}${L ? ' · ' + L.icon + ' ' + esc(L.name) : ''}</small></div></div>
         <div class="sb-links">
-          ${link('home', '#home', 'الرئيسية')}${link('subjects', '#subjects', 'موادي')}${link('progress', '#progress', 'تقدّمي')}${link('achievements', '#achievements', 'إنجازاتي')}
+          ${link('home', '#home', 'الرئيسية')}${link('subjects', '#subjects', 'موادي')}${link('progress', '#progress', 'تقدّمي')}${link('exams', '#exams', 'جدول الاختبارات')}${link('achievements', '#achievements', 'إنجازاتي')}
           <span class="sb-sep" aria-hidden="true"></span>
           ${link('arena', '#arena', 'المنافسة')}
           <button type="button" class="sb-a" id="sb-pomo"><span class="sb-ic" style="display:inline-grid;place-items:center;font-size:1.1rem">⏱️</span><span>مؤقت التركيز</span></button>
