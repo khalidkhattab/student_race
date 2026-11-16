@@ -1613,3 +1613,16 @@ tr.sd-quiet td{color:var(--muted)}
   .xs-table tr.soon{box-shadow:inset -4px 0 0 var(--accent)}
   .xs-table tr.soon td:first-child{box-shadow:none}
 }
+
+/* ===== تنبيه قبل الاختبار ===== */
+.xe-alert{display:flex;gap:14px;align-items:flex-start;padding:16px 18px;border-radius:18px;background:var(--accent-soft);border:2px solid var(--accent);margin-bottom:14px}
+.xe-alert.today{background:var(--ok-soft);border-color:var(--ok)}
+.xe-ic{font-size:2rem;line-height:1}
+.xe-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.xe-body b{font-size:1.15rem}
+.xe-body small{color:var(--muted);font-weight:700}
+.xe-body p{margin:6px 0 0;line-height:1.6}
+.xe-acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.xe-pop{max-width:420px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
+.xe-pop h2{margin:0}
+.xe-big{font-size:3.4rem;line-height:1.1}

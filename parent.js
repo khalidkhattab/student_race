@@ -188,6 +188,67 @@
     bindSchedule(p, 'student', () => NQ.route());
   }
 
+
+  /* ================= تنبيه قبل الاختبار بيوم (ويوم الاختبار نفسه) ================= */
+  const eveExams = p => upcoming(p).filter(e => { const d = daysTo(e.date); return d === 1 || (d === 0 && examAt(e) > Date.now()); });
+  const eveText = (p, e) => {
+    const s = N().subjectById(e.sid), d = daysTo(e.date), pl = examPlan(p, e), n = pl ? pl.left.length : 0;
+    const name = s ? s.name : 'المادة';
+    return {
+      d, s, pl,
+      title: d === 1 ? `غداً اختبار ${name}` : `اليوم اختبار ${name}`,
+      when: 'الساعة ' + timeTxt(e) + (e.note ? ' · ' + e.note : ''),
+      tip: d === 1 ? (n ? `باقي ${num(n)} ${n === 1 ? 'درس يحتاج' : n <= 10 ? 'دروس تحتاج' : 'درساً يحتاج'} مراجعة، راجعها اليوم ونم مبكراً 💪` : 'راجعت كل الدروس 👏 مراجعة خفيفة اليوم ثم نوم مبكر')
+        : 'بالتوفيق! 🍀 راجع أخطاءك بسرعة قبل الاختبار'
+    };
+  };
+  const notifOk = () => 'Notification' in window && window.isSecureContext;
+  function eveHtml(p) {
+    const list = eveExams(p); if (!list.length) return '';
+    return list.map(e => {
+      const x = eveText(p, e), first = x.pl && x.pl.left[0];
+      return `<section class="xe-alert${x.d === 0 ? ' today' : ''}" role="alert">
+        <span class="xe-ic" aria-hidden="true">${x.d === 1 ? '⏰' : '🍀'}</span>
+        <div class="xe-body"><b>${esc(x.title)}</b><small>${esc(x.when)}</small><p>${x.tip}</p>
+          <div class="xe-acts">${first ? `<button type="button" class="btn small" data-plan="${x.s.id}|${first.key}">ابدأ المراجعة ←</button>` : ''}<a class="btn ghost small" href="#exams">جدول الاختبارات</a>
+          ${notifOk() && Notification.permission === 'default' ? '<button type="button" class="linkish" data-xenotif>🔔 نبّهني على هذا الجهاز</button>' : ''}</div></div></section>`;
+    }).join('');
+  }
+  const seenKey = (p, e, d, k) => `nq_xe_${k}_${p.id}_${e.id}_${d}`;
+  const lsHas = k => { try { return !!localStorage.getItem(k); } catch (x) { return false; } };
+  const lsMark = k => { try { localStorage.setItem(k, '1'); } catch (x) { } };
+  async function eveNotify(p) {
+    if (!notifOk() || Notification.permission !== 'granted') return;
+    for (const e of eveExams(p)) {
+      const x = eveText(p, e), k = seenKey(p, e, x.d, 'n'); if (lsHas(k)) continue; lsMark(k);
+      const opt = { body: x.when + '\n' + x.tip.replace(/<[^>]+>/g, ''), icon: 'icons/icon-192.png', badge: 'icons/favicon-32.png', tag: 'exam-' + e.id + '-' + x.d, lang: 'ar', dir: 'rtl' };
+      try {
+        const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+        if (reg) await reg.showNotification('قِمّة · ' + x.title, opt); else new Notification('قِمّة · ' + x.title, opt);
+      } catch (err) { }
+    }
+  }
+  function bindEve(p) {
+    const NQ = N(), list = eveExams(p); if (!list.length) return;
+    const b = document.querySelector('[data-xenotif]');
+    if (b) b.onclick = async () => {
+      let r = 'denied'; try { r = await Notification.requestPermission(); } catch (x) { }
+      if (r === 'granted') { NQ.toast('تم تفعيل التنبيهات على هذا الجهاز ✓'); eveNotify(p); } else NQ.toast('لم يتم السماح بالتنبيهات');
+      b.remove();
+    };
+    eveNotify(p);
+    // نافذة تنبيه مرة واحدة لكل اختبار في اليوم السابق ويوم الاختبار
+    const e = list.find(x => !lsHas(seenKey(p, x, daysTo(x.date), 'p'))); if (!e || document.querySelector('.overlay')) return;
+    const x = eveText(p, e); lsMark(seenKey(p, e, x.d, 'p'));
+    const ov = document.createElement('div'); ov.className = 'overlay';
+    ov.innerHTML = `<div class="card xe-pop" role="alertdialog" aria-modal="true" aria-labelledby="xe-t"><span class="xe-big" aria-hidden="true">${x.d === 1 ? '⏰' : '🍀'}</span>
+      <h2 id="xe-t">${esc(x.title)}</h2><p class="muted" style="margin:0">${esc(x.when)}</p><p style="margin:6px 0 0">${x.tip}</p>
+      <div class="actions"><button type="button" class="btn" data-ok>حسناً</button></div></div>`;
+    const close = () => ov.remove();
+    ov.onclick = ev => { if (ev.target === ov) close(); };
+    document.body.appendChild(ov); const ok = ov.querySelector('[data-ok]'); ok.onclick = close; ok.focus();
+  }
+
   /* ================= صفحة الطالب ================= */
   const REACTS = ['❤️', '👍', '😊', '🙏'];
   function homeHtml(p, part) {
@@ -198,6 +259,7 @@
       <div><small>رسالة من ولي أمرك</small><p>${esc(p.msg.text)}</p></div>
       <div class="px-react" role="group" aria-label="ردّ على الرسالة">${REACTS.map(e => `<button type="button" class="px-react-b" data-react="${e}" aria-label="ردّ بـ ${e}">${e}</button>`).join('')}</div></section>`;
     const b = blocked(p); if (b) h += `<div class="px-lock" role="note">⏰ ${esc(b)}</div>`;
+    h += eveHtml(p);
     }
     if (part === 'top') return h;
     // واجبات ولي الأمر تظهر الآن داخل بطاقة «خطة اليوم» أعلى الصفحة
@@ -213,6 +275,7 @@
   function bindHome(p) {
     const NQ = N(), app = NQ.app;
     startCd();
+    bindEve(p);
     app.querySelectorAll('[data-react]').forEach(b => b.onclick = () => { p.msg.seen = Date.now(); p.msg.re = b.dataset.react; NQ.persist(); NQ.toast('وصل ردّك لولي أمرك ' + b.dataset.react); NQ.route(); });
     app.querySelectorAll('[data-task]').forEach(b => b.onclick = () => {
       const t = (p.tasks || []).find(x => x.id === b.dataset.task); if (!t) return;
