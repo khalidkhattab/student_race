@@ -249,6 +249,65 @@
     document.body.appendChild(ov); const ok = ov.querySelector('[data-ok]'); ok.onclick = close; ok.focus();
   }
 
+
+  /* ----- تنبيه ولي الأمر قبل اختبارات أبنائه بيوم ويوم الاختبار ----- */
+  function parentEveList(people) {
+    return people.flatMap(p => eveExams(p).map(e => {
+      const x = eveText(p, e), fn = String(p.name || '').split(' ')[0], n = x.pl ? x.pl.left.length : 0, name = x.s ? x.s.name : 'المادة';
+      return Object.assign(x, {
+        p, e, fn,
+        ptitle: x.d === 1 ? `غداً اختبار ${name} لـ${fn}` : `اليوم اختبار ${name} لـ${fn}`,
+        ptip: x.d === 1 ? (n ? `باقي ${num(n)} ${n === 1 ? 'درس يحتاج' : n <= 10 ? 'دروس تحتاج' : 'درساً يحتاج'} مراجعة. ذكّر ${fn} بالمراجعة الليلة، وكلمة تشجيع تصنع فرقاً 💪` : `كل الدروس متقنة 👏 تكفي مراجعة خفيفة الليلة ونوم مبكر`)
+          : `ادعُ لـ${fn} بالتوفيق 🍀 ورسالة تشجيع قصيرة تصنع فرقاً`
+      });
+    }));
+  }
+  function parentEveHtml(people) {
+    const list = parentEveList(people); if (!list.length) return '';
+    return list.map(x => `<section class="xe-alert${x.d === 0 ? ' today' : ''}" role="alert">
+        <span class="xe-ic" aria-hidden="true">${x.d === 1 ? '⏰' : '🍀'}</span>
+        <div class="xe-body"><b>${esc(x.ptitle)}</b><small>${esc(x.when)}</small><p>${x.ptip}</p>
+          <div class="xe-acts"><button type="button" class="btn small" data-xeopen="${esc(x.p.id)}|exams">الاستعداد للاختبار</button><button type="button" class="btn ghost small" data-xeopen="${esc(x.p.id)}|cheer">💌 رسالة تشجيع</button>
+          ${notifOk() && Notification.permission === 'default' ? '<button type="button" class="linkish" data-xepnotif>🔔 نبّهني على هذا الجهاز</button>' : ''}</div></div></section>`).join('');
+  }
+  async function parentEveNotify(people) {
+    if (!notifOk() || Notification.permission !== 'granted') return;
+    for (const x of parentEveList(people)) {
+      const k = seenKey(x.p, x.e, x.d, 'pn'); if (lsHas(k)) continue; lsMark(k);
+      const opt = { body: x.when + '\n' + x.ptip, icon: 'icons/icon-192.png', badge: 'icons/favicon-32.png', tag: 'pexam-' + x.e.id + '-' + x.d, lang: 'ar', dir: 'rtl' };
+      try {
+        const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+        if (reg) await reg.showNotification('قِمّة · ' + x.ptitle, opt); else new Notification('قِمّة · ' + x.ptitle, opt);
+      } catch (err) { }
+    }
+  }
+  function bindParentEve(people, openKid) {
+    const NQ = N(), list = parentEveList(people); if (!list.length) return;
+    document.querySelectorAll('[data-xeopen]').forEach(b => b.onclick = () => { const [id, tab] = b.dataset.xeopen.split('|'); openKid(id, tab); });
+    const nb = document.querySelector('[data-xepnotif]');
+    if (nb) nb.onclick = async () => {
+      let r = 'denied'; try { r = await Notification.requestPermission(); } catch (x) { }
+      if (r === 'granted') { NQ.toast('تم تفعيل التنبيهات على هذا الجهاز ✓'); parentEveNotify(people); } else NQ.toast('لم يتم السماح بالتنبيهات');
+      document.querySelectorAll('[data-xepnotif]').forEach(x => x.remove());
+    };
+    parentEveNotify(people);
+    // نافذة واحدة تجمع كل الاختبارات الجديدة (مرة لكل اختبار في اليوم السابق ويوم الاختبار)
+    const fresh = list.filter(x => !lsHas(seenKey(x.p, x.e, x.d, 'pp'))); if (!fresh.length || document.querySelector('.overlay')) return;
+    fresh.forEach(x => lsMark(seenKey(x.p, x.e, x.d, 'pp')));
+    const ov = document.createElement('div'); ov.className = 'overlay';
+    ov.innerHTML = `<div class="card xe-pop" role="alertdialog" aria-modal="true" aria-labelledby="xe-pt"><span class="xe-big" aria-hidden="true">${fresh.some(x => x.d === 1) ? '⏰' : '🍀'}</span>
+      <h2 id="xe-pt">${fresh.length === 1 ? esc(fresh[0].ptitle) : 'اختبارات قريبة لأبنائك'}</h2>
+      ${fresh.length === 1 ? `<p class="muted" style="margin:0">${esc(fresh[0].when)}</p><p style="margin:6px 0 0">${fresh[0].ptip}</p>`
+        : `<ul class="xe-list">${fresh.map(x => `<li><b>${esc(x.ptitle)}</b><small>${esc(x.when)}</small></li>`).join('')}</ul>`}
+      <div class="actions"><button type="button" class="btn ghost" data-ok>لاحقاً</button><button type="button" class="btn" data-go>${fresh.length === 1 ? 'الاستعداد للاختبار' : 'عرض التفاصيل'}</button></div></div>`;
+    const close = () => ov.remove();
+    ov.onclick = ev => { if (ev.target === ov) close(); };
+    document.body.appendChild(ov);
+    ov.querySelector('[data-ok]').onclick = close;
+    const go = ov.querySelector('[data-go]'); go.focus();
+    go.onclick = () => { close(); if (fresh.length === 1) openKid(fresh[0].p.id, 'exams'); else { const a = document.querySelector('.xe-alert'); if (a) a.scrollIntoView({ behavior: 'smooth', block: 'center' }); } };
+  }
+
   /* ================= صفحة الطالب ================= */
   const REACTS = ['❤️', '👍', '😊', '🙏'];
   function homeHtml(p, part) {
@@ -896,6 +955,6 @@
     bindAcct();
   }
 
-  const api = { view: null, showDetails, familyHtml, bindFamily, homeHtml, bindHome, blocked, alerts, kidHtml, bindKid, renderReport, trimDetails, merge, whatsNewHtml, guideHtml, bindGuide, mistakesSheet, openTasks, taskStatus, dueTxt, upcoming, examPlan, scheduleHtml, bindSchedule, renderSchedule };
+  const api = { view: null, showDetails, familyHtml, bindFamily, homeHtml, bindHome, blocked, alerts, kidHtml, bindKid, renderReport, trimDetails, merge, whatsNewHtml, guideHtml, bindGuide, mistakesSheet, openTasks, taskStatus, dueTxt, upcoming, examPlan, scheduleHtml, bindSchedule, renderSchedule, parentEveHtml, bindParentEve };
   window.NQP = api;
 })();

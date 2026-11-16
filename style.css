@@ -1626,3 +1626,7 @@ tr.sd-quiet td{color:var(--muted)}
 .xe-pop{max-width:420px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
 .xe-pop h2{margin:0}
 .xe-big{font-size:3.4rem;line-height:1.1}
+.xe-list{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:8px;width:100%;text-align:start}
+.xe-list li{padding:10px 12px;border-radius:12px;background:var(--chip)}
+.xe-list b,.xe-list small{display:block}
+.xe-list small{color:var(--muted)}

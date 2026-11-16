@@ -769,6 +769,7 @@
     const hour = new Date().getHours();
     app.innerHTML = `<section class="pr-page">
       ${parentHeader({ title: 'هذا الأسبوع في البيت', line: `${hour < 12 ? 'صباح الخير' : 'مساء الخير'} · ${num(people.length)} ${people.length === 1 ? 'طالب' : 'أبناء'} · ${num(tot.n)} اختباراً · ${num(tot.q)} سؤالاً · ${num(Math.round(tot.s / 60))} دقيقة مذاكرة في آخر 7 أيام` })}
+      ${window.NQP ? window.NQP.parentEveHtml(people) : ''}
       ${window.NQP && !newHidden ? window.NQP.whatsNewHtml(people, parentSince) : ''}
       ${window.NQP ? window.NQP.guideHtml(people) : ''}
       ${window.NQSchools ? window.NQSchools.parentHtml(people) : ''}
@@ -796,6 +797,7 @@
     </section>`;
     bindParentHeader();
     if (window.NQP) window.NQP.bindFamily();
+    if (window.NQP) window.NQP.bindParentEve(people, (id, tab) => { parentKid = id; parentTab = tab || 'overview'; renderParent(); window.scrollTo(0, 0); });
     if (window.NQP) window.NQP.bindGuide(people, (id, tab) => { parentKid = id; parentTab = tab || 'overview'; renderParent(); window.scrollTo(0, 0); }, () => renderParent());
     const nx = document.getElementById('px-new-x'); if (nx) nx.onclick = () => { newHidden = true; renderParent(); };
     if (window.NQSchools) window.NQSchools.bindParent(people, () => renderParent());
