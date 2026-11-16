@@ -209,6 +209,8 @@
     if (p && p.pinHash && !ok) store.current = null;
   })();
   const cur = () => store.profiles[store.current] || null;
+  // صياغة مذكر/مؤنث حسب اختيار الطالب الحالي (طالب/طالبة)
+  const gw = (m, f) => { const p = cur(); return p && p.gender === 'f' ? f : m; };
   const state = {
     get name() { return cur() ? cur().name : ''; },
     get records() { return cur() ? cur().records : []; },
@@ -884,7 +886,7 @@
         <h1 class="lg-title">${people.length ? 'من سيذاكر الآن؟' : 'أهلاً بك في قِمّة! لنبدأ'}</h1>
         ${people.length ? `<div class="lg-tiles${loginManage ? ' manage' : ''}">
           ${people.map((p, i) => {
-            const xp = g ? g._totalXp(p) : 0, L = g ? g._levelOf(xp) : null;
+            const xp = g ? g._totalXp(p) : 0, L = g ? g._levelOf(xp, p) : null;
             const isRecent = i === 0 && people.length > 1;
             const a = p.avatar != null ? AVATARS[p.avatar] : null;
             return `<div class="lg-tile-wrap">
@@ -1099,10 +1101,10 @@
       <h3>تغيير الرقم السري <small>(اتركه فارغاً إذا لا تريد تغييره)</small></h3>
       <div class="pin-row">
         <div>${pinInput('ep1', 'الرقم الجديد')}</div>
-        <div>${pinInput('ep2', 'أعد الرقم الجديد')}</div>
+        <div>${pinInput('ep2', gw('أعد الرقم الجديد', 'أعيدي الرقم الجديد'))}</div>
       </div>
       <h3>للحفظ</h3>
-      <div class="pin-row"><div>${pinInput('ep0', 'اكتب رقمك السري الحالي')}</div></div>
+      <div class="pin-row"><div>${pinInput('ep0', gw('اكتب رقمك السري الحالي', 'اكتبي رقمك السري الحالي'))}</div></div>
       <p class="err" id="ed-err" role="alert"></p>
       <div class="actions"><button type="button" class="btn ghost" data-n>إلغاء</button><button type="submit" class="btn">حفظ</button></div>
     </form>`;
@@ -1116,7 +1118,7 @@
     ov.onclick = e => { if (e.target === ov) done(); };
     ov.querySelector('form').onsubmit = async e => {
       e.preventDefault();
-      if (p.pinHash && (await hashPin(p.id, e0.value)) !== p.pinHash) { err.textContent = 'اكتب رقمك السري الحالي الصحيح للحفظ.'; e0.focus(); return; }
+      if (p.pinHash && (await hashPin(p.id, e0.value)) !== p.pinHash) { err.textContent = gw('اكتب رقمك السري الحالي الصحيح للحفظ.', 'اكتبي رقمك السري الحالي الصحيح للحفظ.'); e0.focus(); return; }
       if (e1.value || e2.value) {
         if (!validPin(e1.value)) { err.textContent = 'الرقم الجديد يجب أن يكون 4 أرقام.'; return; }
         if (e1.value !== e2.value) { err.textContent = 'الرقمان الجديدان غير متطابقين.'; return; }
@@ -1172,7 +1174,7 @@
   const icon = k => `<svg class="sb-ic" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
   function wrapShell(active) {
     const p = cur(); if (!p) return;
-    const g = gx(), xp = g ? g._totalXp(p) : 0, L = g ? g._levelOf(xp) : null;
+    const g = gx(), xp = g ? g._totalXp(p) : 0, L = g ? g._levelOf(xp, p) : null;
     const frag = document.createDocumentFragment();
     while ($app.firstChild) frag.appendChild($app.firstChild);
     const link = (k, href, t) => `<a class="sb-a${active === k ? ' on' : ''}" href="${href}" ${active === k ? 'aria-current="page"' : ''}>${icon(k)}<span>${t}</span></a>`;
@@ -1223,7 +1225,7 @@
     const all = shuffle([...pick.values()]).sort((a, b) => b[2] - a[2]).slice(0, 10);
     if (!all.length) { toast('لا توجد أسئلة متاحة الآن'); return; }
     const sids = new Map(all.map(([q, sid]) => [q.id, sid]));
-    startQuiz({ id: 'quick', name: 'تدريب سريع' }, 'quick', '⚡ تدرّب ٥ دقائق', all.map(x => x[0]), 'practice', { kind: 'quick', limit: 300, sids });
+    startQuiz({ id: 'quick', name: 'تدريب سريع' }, 'quick', gw('⚡ تدرّب ٥ دقائق', '⚡ تدرّبي ٥ دقائق'), all.map(x => x[0]), 'practice', { kind: 'quick', limit: 300, sids });
   }
 
   // مادة السؤال من رقمه (لأسئلة تحدي اليوم وتحدي صديق)
@@ -1283,7 +1285,7 @@
       <div class="db-bar"><i style="width:${Math.round(n / items.length * 100)}%;background:var(--ok)"></i></div>
       <ul class="plan-list">${items.map(x => `<li class="${x.done ? 'done' : ''}${x.late ? ' late' : ''}"><span class="plan-ic" aria-hidden="true">${x.done ? '✓' : x.ic}</span>
         <div><b>${esc(x.t)}</b><small>${esc(x.sub)}</small></div>
-        ${x.done ? '<span class="sr">تم</span>' : x.href ? `<a class="btn small ghost" href="${x.href}">ابدأ</a>` : `<button type="button" class="btn small ghost" ${x.act}>ابدأ</button>`}</li>`).join('')}</ul>
+        ${x.done ? '<span class="sr">تم</span>' : x.href ? `<a class="btn small ghost" href="${x.href}">${gw('ابدأ', 'ابدئي')}</a>` : `<button type="button" class="btn small ghost" ${x.act}>${gw('ابدأ', 'ابدئي')}</button>`}</li>`).join('')}</ul>
     </section>`;
   }
 
@@ -1292,7 +1294,7 @@
     const n = streakDays(rec);
     if (n < 3 || rec.some(r => isToday(r.date)) || new Date().getHours() < 16) return '';
     return `<section class="streak-warn" role="status"><span aria-hidden="true">🔥</span><div><b>سلسلتك ${nf(n)} أيام ستنقطع الليلة!</b><small>اختبار واحد قصير يكفي للحفاظ عليها.</small></div>
-      <button type="button" class="btn warn small" data-quick>تدرّب ٥ دقائق</button></section>`;
+      <button type="button" class="btn warn small" data-quick>${gw('تدرّب', 'تدرّبي')} ٥ دقائق</button></section>`;
   }
 
   /* ---------- مقارنة بنفسك: هذا الأسبوع مقابل الأسبوع الماضي ---------- */
@@ -1319,7 +1321,7 @@
     const rec = records();
     const sorted = started.slice().sort((a, b) => b.st.level - a.st.level);
     const strong = sorted[0], weakest = sorted.length > 1 ? sorted[sorted.length - 1] : null;
-    const xp = g ? g._totalXp(p) : 0, L = g ? g._levelOf(xp) : null, lg = g ? g._leagueOf(xp) : null, wk = g ? g._xpIn(p, g._weekKey()) : 0;
+    const xp = g ? g._totalXp(p) : 0, L = g ? g._levelOf(xp, p) : null, lg = g ? g._leagueOf(xp) : null, wk = g ? g._xpIn(p, g._weekKey()) : 0;
     const d = g ? g._today() : '', goal = g ? g._goalOf(p) : 20, ans = g ? g._answeredOn(p, d) : 0, gp = Math.min(1, ans / goal);
     const dailyDone = p.daily && d && p.daily[d];
     const weekAgo = Date.now() - 7 * 864e5;
@@ -1333,7 +1335,7 @@
       <header class="pg-head">
         <div><h1>${hello} يا ${esc(p.name.split(/\s+/)[0])}</h1>
           <p class="sub">${new Date().toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' })} · ${left ? `أنت على بُعد ${nf(left)} سؤال من هدف اليوم` : 'حققت هدف اليوم 🎉'}</p></div>
-        <div class="db-btns"><button type="button" class="btn warn" data-quick>⚡ تدرّب ٥ دقائق</button><a class="btn" href="#subjects">ابدأ اختباراً جديداً</a></div>
+        <div class="db-btns"><button type="button" class="btn warn" data-quick>⚡ ${gw('تدرّب', 'تدرّبي')} ٥ دقائق</button><a class="btn" href="#subjects">${gw('ابدأ', 'ابدئي')} اختباراً جديداً</a></div>
       </header>
       ${window.NQP ? window.NQP.homeHtml(p, 'top') : ''}
       ${window.NQSchools && window.NQSchools.studentHtml ? window.NQSchools.studentHtml(p) : ''}
@@ -1342,7 +1344,7 @@
       <section class="pg-grid2">
         <div class="hero-lvl">
           <div class="ring hero-ring" style="--p:${overall || 0};--rc:#FBBF24" role="img" aria-label="المستوى العام ${overall == null ? 'لم يُحسب بعد' : overall + '%'}"><div><b>${overall == null ? '—' : overall + '%'}</b><small>المستوى العام</small></div></div>
-          <div class="hero-txt"><span>تقديرك العام</span><b>${og ? og.t : 'ابدأ أول اختبار'}</b>
+          <div class="hero-txt"><span>تقديرك العام</span><b>${og ? og.t : gw('ابدأ أول اختبار', 'ابدئي أول اختبار')}</b>
             <span>${strong ? `أقوى مادة: ${esc(strong.s.name)} ${strong.st.level}%` : 'سيظهر مستواك بعد أول اختبار'}${weakest && weakest.s.id !== strong.s.id ? ` · تحتاج تركيزاً: ${esc(weakest.s.name)} ${weakest.st.level}%` : ''}</span></div>
         </div>
         ${L ? `<div class="card pg-lvl">
@@ -1356,7 +1358,7 @@
         ${tile('اختبارات محلولة', nf(rec.length), `+${nf(wRec.length)} هذا الأسبوع`)}
         ${tile('أسئلة أجبت عليها', nf(rec.reduce((a, r) => a + r.total, 0)), `+${nf(wRec.reduce((a, r) => a + r.total, 0))} هذا الأسبوع`)}
         ${tile('وقت المذاكرة', nf(Math.round(rec.reduce((a, r) => a + r.secs, 0) / 60)) + ' د', `${nf(Math.round(wRec.reduce((a, r) => a + r.secs, 0) / 60))} د هذا الأسبوع`)}
-        ${tile('أيام متتالية', nf(streakDays(rec)) + ' ' + (streakDays(rec) === 1 ? 'يوم' : 'أيام'), streakDays(rec) >= 3 ? 'استمر! 🔥' : 'ذاكر يومياً لتحصل على وسام')}
+        ${tile('أيام متتالية', nf(streakDays(rec)) + ' ' + (streakDays(rec) === 1 ? 'يوم' : 'أيام'), streakDays(rec) >= 3 ? gw('استمر! 🔥', 'استمري! 🔥') : gw('ذاكر يومياً لتحصل على وسام', 'ذاكري يومياً لتحصلي على وسام'))}
       </section>
       ${weekCompare(rec)}
       ${srsCard(p)}
@@ -1365,17 +1367,17 @@
           <h2>هدف اليوم</h2>
           <div class="pg-big"><b>${nf(ans)}</b><span>من ${nf(goal)} سؤالاً</span></div>
           <div class="db-bar"><i style="width:${Math.round(gp * 100)}%;background:var(--ok)"></i></div>
-          <small class="muted">${gp >= 1 ? 'حققت هدفك اليوم 🎉' : 'أكمل الهدف واحصل على 25 نقطة إضافية'}</small>
+          <small class="muted">${gp >= 1 ? 'حققت هدفك اليوم 🎉' : gw('أكمل الهدف واحصل على 25 نقطة إضافية', 'أكملي الهدف واحصلي على 25 نقطة إضافية')}</small>
         </div>
         <div class="card pg-card warm">
           <h2>تحدي اليوم</h2>
           <p>${dailyDone ? `أنهيت تحدي اليوم: <b>${nf(dailyDone.score)} من ${nf(dailyDone.total)}</b>` : `10 أسئلة من كل المواد، نفس الأسئلة لكل طلاب ${esc(p.grade)}.`}</p>
-          <a class="btn warn" href="#daily">${dailyDone ? 'ترتيب اليوم' : 'ابدأ التحدي'}</a>
+          <a class="btn warn" href="#daily">${dailyDone ? 'ترتيب اليوم' : gw('ابدأ التحدي', 'ابدئي التحدي')}</a>
         </div>
         <div class="card pg-card">
-          <h2>أكمل من حيث توقفت</h2>
+          <h2>${gw('أكمل من حيث توقفت', 'أكملي من حيث توقفتِ')}</h2>
           ${nx ? `<div><b>${esc(nx.lesson.short)}: ${esc(nx.lesson.name)}</b><small class="muted" style="display:block">${esc(nx.s.name)} · ${esc(nx.unit.name.split(':')[0])} · ${nf(nx.lesson.questions.length)} سؤال${nx.best != null ? ` · أفضل درجة ${nx.best}%` : ''}</small></div>
-            <button type="button" class="btn ghost" id="nxgo">${nx.best != null ? 'أعد المحاولة' : 'ابدأ الدرس'}</button>` : '<p>أنهيت كل الدروس بدرجة جيدة! جرّب الاختبارات الشاملة 🎓</p>'}
+            <button type="button" class="btn ghost" id="nxgo">${nx.best != null ? gw('أعد المحاولة', 'أعيدي المحاولة') : gw('ابدأ الدرس', 'ابدئي الدرس')}</button>` : '<p>أنهيت كل الدروس بدرجة جيدة! ' + gw('جرّب', 'جرّبي') + ' الاختبارات الشاملة 🎓</p>'}
         </div>
       </section>
       ${window.NQP ? window.NQP.homeHtml(p, 'bottom') : ''}
@@ -1384,7 +1386,7 @@
         ${rec.length ? `<ul class="pg-list">${rec.slice(-5).reverse().map(r => {
           const s = subjectById(r.subjectId), gg = gradeOf(r.pct);
           return `<li><span class="dot" style="background:${gg.c}"></span><div><b>${esc(r.title)}</b><small>${recLabel(r)} · ${r.mode === 'exam' ? 'اختبار' : 'تدريب'} · ${shortDate(r.date)}</small></div><span class="pct" style="color:${gg.c}">${r.pct}%</span></li>`;
-        }).join('')}</ul>` : '<p class="empty">لم تحل أي اختبار بعد. <a href="#subjects">اختر مادة وابدأ</a></p>'}
+        }).join('')}</ul>` : `<p class="empty">${gw('لم تحل', 'لم تحلّي')} أي اختبار بعد. <a href="#subjects">${gw('اختر مادة وابدأ', 'اختاري مادة وابدئي')}</a></p>`}
       </section>
       <div class="sync" id="sync"></div>`;
     const go1 = document.getElementById('nxgo'); if (go1) go1.onclick = () => openStart(nx.s, nx.key);
@@ -1409,7 +1411,7 @@
       lessonQuery = inp.value; const q = normAr(inp.value);
       if (q.length < 2) { out.innerHTML = ''; return; }
       const words = q.split(' '), hits = idx.filter(x => words.every(w => x.n.includes(w))).slice(0, 8);
-      out.innerHTML = hits.length ? `<ul class="ls-list">${hits.map((x, i) => { const b = bestFor(x.s.id, x.key); return `<li><span aria-hidden="true">${x.s.icon}</span><div><b>${esc(x.l.short)}: ${esc(x.l.name)}</b><small>${esc(x.s.name)} · ${esc(x.u.name.split(':')[0])}${b != null ? ` · أفضل درجة ${b}%` : ''}</small></div><button type="button" class="btn small" data-ls="${i}">ابدأ</button></li>`; }).join('')}</ul>`
+      out.innerHTML = hits.length ? `<ul class="ls-list">${hits.map((x, i) => { const b = bestFor(x.s.id, x.key); return `<li><span aria-hidden="true">${x.s.icon}</span><div><b>${esc(x.l.short)}: ${esc(x.l.name)}</b><small>${esc(x.s.name)} · ${esc(x.u.name.split(':')[0])}${b != null ? ` · أفضل درجة ${b}%` : ''}</small></div><button type="button" class="btn small" data-ls="${i}">${gw('ابدأ', 'ابدئي')}</button></li>`; }).join('')}</ul>`
         : `<p class="muted ls-none">لا يوجد درس بهذا الاسم في ${esc(curGrade)}.</p>`;
       out.querySelectorAll('[data-ls]').forEach(b => b.onclick = () => { const x = hits[+b.dataset.ls]; openStart(x.s, x.key); });
     };
@@ -1421,7 +1423,7 @@
     return `<section class="card saved-card"><div class="pg-row"><h2>⭐ أسئلتي المحفوظة</h2><span class="pr-tag">${nf(total)} سؤال</span></div>
       <p class="muted" style="margin:0 0 10px">أسئلة حفظتها بالنجمة أثناء الاختبار لتراجعها قبل الامتحان.</p>
       <div class="saved-subs">${list.map((x, i) => `<div class="saved-sub"><span aria-hidden="true">${x.s.icon}</span><div><b>${esc(x.s.name)}</b><small>${nf(x.ids.size)} سؤال</small></div>
-        <button type="button" class="btn small" data-sv="${i}">راجعها</button><button type="button" class="btn ghost small" data-svp="${i}" aria-label="اطبع أسئلة ${esc(x.s.name)} المحفوظة">🖨️</button></div>`).join('')}</div></section>`;
+        <button type="button" class="btn small" data-sv="${i}">${gw('راجعها', 'راجعيها')}</button><button type="button" class="btn ghost small" data-svp="${i}" aria-label="اطبع أسئلة ${esc(x.s.name)} المحفوظة">🖨️</button></div>`).join('')}</div></section>`;
   }
   function bindSaved() {
     const list = savedBySubject(cur()), pool = x => allQuestions(x.s).filter(q => x.ids.has(q.id));
@@ -1446,18 +1448,18 @@
         <input id="ls-in" type="search" autocomplete="off" placeholder="🔎 ابحث عن درس… مثل: القيمة المطلقة" value="${esc(lessonQuery)}">
         <div class="ls-res" id="ls-res" aria-live="polite"></div></div>
       ${savedCard()}
-      ${sugg ? `<section class="pg-sugg"><div><span>اقتراح اليوم</span><b>راجع «${esc(sugg.name)}» في ${esc(sugg.s.name)}</b><small>أفضل درجة لك ${sugg.pct}%${(wrongBank()[sugg.s.id] || []).length ? ` · لديك ${nf((wrongBank()[sugg.s.id] || []).length)} سؤال في مراجعة الأخطاء` : ''}</small></div>
-        <button type="button" class="btn" id="sgo">ابدأ المراجعة</button></section>` : ''}
+      ${sugg ? `<section class="pg-sugg"><div><span>اقتراح اليوم</span><b>${gw('راجع', 'راجعي')} «${esc(sugg.name)}» في ${esc(sugg.s.name)}</b><small>أفضل درجة لك ${sugg.pct}%${(wrongBank()[sugg.s.id] || []).length ? ` · لديك ${nf((wrongBank()[sugg.s.id] || []).length)} سؤال في مراجعة الأخطاء` : ''}</small></div>
+        <button type="button" class="btn" id="sgo">${gw('ابدأ', 'ابدئي')} المراجعة</button></section>` : ''}
       <section class="pg-subjects">
         ${shown.map(({ s, st }) => {
           const gg = st.level == null ? null : gradeOf(st.level), prog = st.total ? Math.round(st.done / st.total * 100) : 0;
           return `<article class="card pg-subj" style="--c:${s.color}">
-            <header><span class="ic" aria-hidden="true">${s.icon}</span><div><h2>${esc(s.name)}</h2><small>${st.last ? 'آخر اختبار ' + shortDate(st.last.date) : 'لم تبدأ بعد'}</small></div>
+            <header><span class="ic" aria-hidden="true">${s.icon}</span><div><h2>${esc(s.name)}</h2><small>${st.last ? 'آخر اختبار ' + shortDate(st.last.date) : gw('لم تبدأ بعد', 'لم تبدئي بعد')}</small></div>
               <b class="lvl" style="color:${levelColor(st.level)}">${st.level == null ? '—' : st.level + '%'}</b></header>
             <div><div class="pg-row sm"><span>الدروس المنجزة</span><span>${nf(st.done)} من ${nf(st.total)}</span></div>
               <div class="db-bar"><i style="width:${prog}%;background:${s.color}"></i></div></div>
             <div class="pg-chips"><span class="tag">${gg ? gg.t : 'جديدة'}</span><span class="tag">${st.wrong ? nf(st.wrong) + ' أخطاء' : 'لا أخطاء'}</span></div>
-            <div class="pg-btns"><a class="btn" href="#subject-${s.id}" style="background:${s.color}">${st.done ? 'أكمل الدروس' : 'ابدأ المادة'}</a>
+            <div class="pg-btns"><a class="btn" href="#subject-${s.id}" style="background:${s.color}">${st.done ? gw('أكمل الدروس', 'أكملي الدروس') : gw('ابدأ المادة', 'ابدئي المادة')}</a>
               <button type="button" class="btn ghost" data-mist="${s.id}" ${st.wrong ? '' : 'disabled'}>الأخطاء</button></div>
           </article>`;
         }).join('') || '<p class="empty">لا توجد مواد في هذا التصنيف.</p>'}
@@ -1516,13 +1518,13 @@
         <div class="card">
           <h2>مستواي في كل مادة</h2>
           ${subRows.length ? `<div class="pg-bars">${subRows.map(x => `<div><div class="pg-row sm"><b>${x.s.icon} ${esc(x.s.name)}</b><span style="font-weight:800;color:${levelColor(x.lvl)}">${x.lvl}%${x.d != null ? ` <small class="muted">${x.d > 0 ? '+' : ''}${nf(x.d)}</small>` : ''}</span></div>
-            <div class="db-bar"><i style="width:${x.lvl}%;background:${levelColor(x.lvl)}"></i></div></div>`).join('')}</div>` : '<p class="empty">ابدأ بحل الاختبارات ليظهر مستواك في كل مادة.</p>'}
+            <div class="db-bar"><i style="width:${x.lvl}%;background:${levelColor(x.lvl)}"></i></div></div>`).join('')}</div>` : '<p class="empty">' + gw('ابدأ', 'ابدئي') + ' بحل الاختبارات ليظهر مستواك في كل مادة.</p>'}
         </div>
       </section>
       <section class="card">
         <h2>دروس تحتاج مراجعة</h2>
         ${weak.length ? `<div class="pg-weak">${weak.map(w => `<div class="weak-card"><b>${esc(w.name)}</b><small class="muted">${esc(w.s.name)} · ${esc(w.unit.name.split(':')[0])}</small>
-          <div class="pg-row sm"><span style="font-weight:800;color:var(--bad)">أفضل درجة ${w.pct}%</span><button type="button" class="btn warn small" data-retry="${w.s.id}|${w.key}">أعد الاختبار</button></div></div>`).join('')}</div>`
+          <div class="pg-row sm"><span style="font-weight:800;color:var(--bad)">أفضل درجة ${w.pct}%</span><button type="button" class="btn warn small" data-retry="${w.s.id}|${w.key}">${gw('أعد', 'أعيدي')} الاختبار</button></div></div>`).join('')}</div>`
           : `<p class="empty">${all.length ? 'ممتاز! كل الدروس التي حللتها درجتك فيها 65% أو أكثر 🎉' : 'ستظهر هنا الدروس التي درجتك فيها أقل من 65%.'}</p>`}
       </section>
       <section class="card">
@@ -1567,7 +1569,7 @@
     $app.innerHTML = `
       <div class="crumbs"><a href="#home">المواد</a> › ${esc(s.grade)} › ${esc(s.name)}</div>
       <h1>${s.icon} ${esc(s.name)}</h1>
-      <p class="sub">${esc(s.grade)} — اختر الدرس الذي تريد الاختبار فيه</p>
+      <p class="sub">${esc(s.grade)} — ${gw('اختر الدرس الذي تريد', 'اختاري الدرس الذي تريدين')} الاختبار فيه</p>
       ${summitPath(s)}
       ${s.units.map(u => `
         <section class="unit">
@@ -1578,20 +1580,20 @@
                 <div class="num">${i + 1}</div>
                 <div class="info"><b>${esc(l.name)}</b><small>${esc(l.short)} · ${l.questions.length} سؤال</small></div>
                 ${badge(bestFor(s.id, u.id + '/' + l.id))}
-                <button class="btn" data-start="${u.id}/${l.id}">ابدأ</button>
+                <button class="btn" data-start="${u.id}/${l.id}">${gw('ابدأ', 'ابدئي')}</button>
               </div>`).join('')}
             <div class="card lesson exam">
               <div class="num">★</div>
               <div class="info"><b>الاختبار الشامل للوحدة</b><small>${EXAM_SIZE} سؤالاً عشوائياً من كل الدروس</small></div>
               ${badge(bestFor(s.id, u.id + '/exam'))}
-              <button class="btn warn" data-start="${u.id}/exam">ابدأ</button>
+              <button class="btn warn" data-start="${u.id}/exam">${gw('ابدأ', 'ابدئي')}</button>
             </div>
           </div>
         </section>`).join('')}
       <section class="card lesson">
         <div class="num">↺</div>
         <div class="info"><b>مراجعة أخطائي</b><small>${wrongCount ? wrongCount + ' سؤال أخطأت فيه سابقاً' : 'لا توجد أخطاء محفوظة حالياً 👏'}</small></div>
-        <button class="btn ghost" data-start="mistakes" ${wrongCount ? '' : 'disabled'}>راجع</button>
+        <button class="btn ghost" data-start="mistakes" ${wrongCount ? '' : 'disabled'}>${gw('راجع', 'راجعي')}</button>
       </section>`;
     $app.querySelectorAll('[data-start]').forEach(b => {
       b.onclick = () => openStart(s, b.dataset.start);
@@ -1691,7 +1693,7 @@
           </div>
 
           <div class="pomo-btns">
-            <button type="button" class="btn ${pomoRunning ? 'warn' : ''}" id="pomo-toggle">${pomoRunning ? '⏸️ إيقاف مؤقت' : '▶️ ابدأ الجلسة'}</button>
+            <button type="button" class="btn ${pomoRunning ? 'warn' : ''}" id="pomo-toggle">${pomoRunning ? '⏸️ إيقاف مؤقت' : gw('▶️ ابدأ الجلسة', '▶️ ابدئي الجلسة')}</button>
             <button type="button" class="btn ghost" id="pomo-reset">🔄 إعادة ضبط</button>
           </div>
 
@@ -1739,7 +1741,7 @@
                 persist();
                 toast('🎉 رائع! أنهيت جلسة تركيز كاملة (+15 نقطة XP)');
               } else {
-                toast('☕ انتهى وقت الاستراحة! هل أنت مستعد للتركيز؟');
+                toast('☕ انتهى وقت الاستراحة! هل أنت ' + gw('مستعد', 'مستعدة') + ' للتركيز؟');
               }
               pomoMode = pomoMode === 'work' ? 'break' : 'work';
               pomoTotalSecs = (pomoMode === 'work' ? 25 : 5) * 60;
@@ -2118,7 +2120,7 @@
           <button type="button" class="btn ghost small" id="ws-print-btn">🖨️ ورقة عمل</button>
           <div>
             <button class="btn ghost" data-x>إلغاء</button>
-            <button class="btn" data-go>${mode === 'flashcards' ? 'ابدأ البطاقات 🗂️' : 'ابدأ 🚀'}</button>
+            <button class="btn" data-go>${mode === 'flashcards' ? gw('ابدأ البطاقات 🗂️', 'ابدئي البطاقات 🗂️') : gw('ابدأ 🚀', 'ابدئي 🚀')}</button>
           </div>
         </div>
       </div>`;
@@ -2177,7 +2179,7 @@
     } else if (q.type === 'fill') {
       const cls = showFb ? (scoreOf(q, r) === 1 ? 'right' : 'wrong') : '';
       body = `<div class="fill ${cls}"><label class="sr" for="fill-in">إجابتك</label>
-        <input id="fill-in" type="text" autocomplete="off" spellcheck="false" maxlength="80" placeholder="اكتب إجابتك هنا" value="${esc(r || '')}" ${showFb ? 'disabled' : ''}></div>`;
+        <input id="fill-in" type="text" autocomplete="off" spellcheck="false" maxlength="80" placeholder="${gw('اكتب إجابتك هنا', 'اكتبي إجابتك هنا')}" value="${esc(r || '')}" ${showFb ? 'disabled' : ''}></div>`;
     } else {
       body = `<div class="match">${item.order.map(ii => {
         const it = q.items[ii], v = r ? r[ii] : null;
@@ -2192,7 +2194,7 @@
       }).join('')}</div>`;
     }
 
-    const hint = q.type === 'multi' ? 'اختر كل الإجابات الصحيحة' : q.type === 'match' ? 'اختر التصنيف المناسب لكل عنصر' : q.type === 'fill' ? 'اكتب الإجابة في المربع (رقم أو كلمة)' : q.tf ? 'هل العبارة صحيحة أم خاطئة؟' : 'اختر إجابة واحدة';
+    const hint = q.type === 'multi' ? gw('اختر كل الإجابات الصحيحة', 'اختاري كل الإجابات الصحيحة') : q.type === 'match' ? gw('اختر التصنيف المناسب لكل عنصر', 'اختاري التصنيف المناسب لكل عنصر') : q.type === 'fill' ? gw('اكتب الإجابة في المربع (رقم أو كلمة)', 'اكتبي الإجابة في المربع (رقم أو كلمة)') : q.tf ? 'هل العبارة صحيحة أم خاطئة؟' : gw('اختر إجابة واحدة', 'اختاري إجابة واحدة');
     let fb = '';
     if (showFb) {
       const sc = scoreOf(q, r);
@@ -2355,7 +2357,7 @@
           <a class="btn ghost" href="#home">لوحتي</a>
         </div>
         <div class="review">
-          <h2>${wrong.length ? 'راجع أخطاءك' : 'ممتاز! لا توجد أخطاء 🎉'}</h2>
+          <h2>${wrong.length ? gw('راجع أخطاءك', 'راجعي أخطاءك') : 'ممتاز! لا توجد أخطاء 🎉'}</h2>
           ${wrong.map(x => `<div class="rv">
             <p><span class="kind">${esc(x.q.kind || '')}</span> ${esc(x.q.q)}</p>
             ${qImg(x.q, true)}
@@ -2418,12 +2420,12 @@
             return `<tr><td>${fmtDate(r.date)}</td><td>${s ? s.icon + ' ' + esc(subjLabel(s)) : recLabel(r, true)}</td><td>${esc(r.title)}</td>
               <td>${r.mode === 'exam' ? 'اختبار' : 'تدريب'}</td><td>${r.score}/${r.total}</td>
               <td><span class="best ${g.cls}">${r.pct}% · ${g.t}</span></td><td>${fmtTime(r.secs)}</td></tr>`;
-          }).join('')}</tbody></table>` : `<div class="empty">لا توجد اختبارات محفوظة بعد. <a href="#home" style="color:var(--brand);font-weight:700">ابدأ أول اختبار</a></div>`}
+          }).join('')}</tbody></table>` : `<div class="empty">لا توجد اختبارات محفوظة بعد. <a href="#home" style="color:var(--brand);font-weight:700">${gw('ابدأ', 'ابدئي')} أول اختبار</a></div>`}
       </div>`;
     refreshSync();
     document.getElementById('flt').onchange = e => { recFilter = e.target.value; route(); };
     document.getElementById('clr').onclick = async () => {
-      if (await ask(`سيتم حذف كل درجات وأخطاء "${state.name}" نهائياً (الطلاب الآخرون لن يتأثروا). هل أنت متأكد؟`, 'مسح السجل', true)) {
+      if (await ask(`سيتم حذف كل درجات وأخطاء "${state.name}" نهائياً (الطلاب الآخرون لن يتأثروا). هل أنت ${gw('متأكد', 'متأكدة')}؟`, 'مسح السجل', true)) {
         state.records = []; state.wrong = {}; persist(); route(); toast('تم مسح السجل');
       }
     };
@@ -2457,7 +2459,7 @@
 
   // واجهة مكشوفة لملف المنافسة
   window.NQ = {
-    store, cur, persist, SUBJECTS, GRADES, allQuestions, subjectById, gradeOf, esc, toast, ask, go, route,
+    store, cur, gw, persist, SUBJECTS, GRADES, allQuestions, subjectById, gradeOf, esc, toast, ask, go, route,
     startQuiz, openStart, printWorksheet: renderPrintWorksheet, records, respText, correctText, qImg, hashPin, avatarHtml, AVATARS, fmtDate, fmtTime, shuffle, newId, subjectStats, streakDays, validPin, weakPin, digitsOnly, pinInput,
     joinFamily, familyJoinDialog, acctSignIn, acctOk, syncNow: () => initCloud(), get cloudKind() { return cloudKind; }, get synced() { return !!cloud; },
     get grade() { return curGrade; }, renderHome: () => renderHome(), app: $app,

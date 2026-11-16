@@ -63,7 +63,7 @@
     }
     if (L.max) {
       const used = p.records.filter(r => ymd(new Date(r.date)) === ymd()).reduce((a, r) => a + (r.secs || 0), 0) / 60;
-      if (used >= L.max) return `وصلت للحد اليومي للمذاكرة (${num(L.max)} دقيقة). استرح وعُد غداً 🌙`;
+      if (used >= L.max) return `وصلت للحد اليومي للمذاكرة (${num(L.max)} دقيقة). ${gx(p, 'استرح وعُد', 'استريحي وعودي')} غداً 🌙`;
     }
     return null;
   }
@@ -353,7 +353,7 @@
     (p.tasks || []).forEach(t => {
       const st = taskStatus(p, t);
       if (!st.done && st.late) out.push({ cls: 'bad', t: `${fn}: واجب متأخر`, s: `«${esc(t.title)}» · ${dueTxt(t.due)}`, pid: p.id });
-      else if (st.done && st.rec && st.rec.date > Date.now() - 2 * DAY) out.push({ cls: 'ok', t: `${fn} أنهى واجباً`, s: `«${esc(t.title)}» · ${num(st.rec.pct)}٪`, pid: p.id });
+      else if (st.done && st.rec && st.rec.date > Date.now() - 2 * DAY) out.push({ cls: 'ok', t: `${fn} ${gx(p, 'أنهى', 'أنهت')} واجباً`, s: `«${esc(t.title)}» · ${num(st.rec.pct)}٪`, pid: p.id });
     });
     upcoming(p).filter(e => daysTo(e.date) <= 3).forEach(e => { const s = N().subjectById(e.sid); if (s) out.push({ cls: 'mid', t: `${fn}: امتحان ${esc(s.name)} ${daysTo(e.date) === 0 ? 'اليوم' : `بعد ${num(daysTo(e.date))} ${daysTo(e.date) === 1 ? 'يوم' : 'أيام'}`}`, s: fdate(e.date), pid: p.id }); });
     return out;
@@ -372,9 +372,9 @@
     const rows = people.map(p => {
       const bits = [], rs = p.records.filter(r => r.date > since);
       const n = rs.length;
-      if (n) bits.push(`حلّ ${n === 1 ? 'اختباراً واحداً' : n === 2 ? 'اختبارين' : num(n) + (n <= 10 ? ' اختبارات' : ' اختباراً')} بمتوسط ${num(avgOf(rs))}٪`);
+      if (n) bits.push(`${gx(p, 'حلّ', 'حلّت')} ${n === 1 ? 'اختباراً واحداً' : n === 2 ? 'اختبارين' : num(n) + (n <= 10 ? ' اختبارات' : ' اختباراً')} بمتوسط ${num(avgOf(rs))}٪`);
       const done = (p.tasks || []).filter(t => { const st = taskStatus(p, t); return st.done && ((st.rec && st.rec.date > since) || (t.doneAt && t.doneAt > since)); });
-      if (done.length) bits.push(done.length === 1 ? `أنهى واجب «${esc(done[0].title)}»` : `أنهى ${num(done.length)} واجبات`);
+      if (done.length) bits.push(done.length === 1 ? `${gx(p, 'أنهى', 'أنهت')} واجب «${esc(done[0].title)}»` : `${gx(p, 'أنهى', 'أنهت')} ${num(done.length)} واجبات`);
       if (p.msg && p.msg.seen > since) bits.push(`قرأ رسالتك ✓${p.msg.re ? ' وردّ ' + esc(p.msg.re) : ''}`);
       const nb = BL.filter(b => p.badges && p.badges[b.id] > since);
       if (nb.length) bits.push(`حصل على ${nb.length === 1 ? 'وسام' : num(nb.length) + ' أوسمة'} ${nb.map(b => b.icon).join('')}`);
@@ -489,7 +489,9 @@
     ['احتفال', ['🎉', '🏆', '🥇', '🎁', '🎈', '🍦', '🍕', '⚽']],
     ['دراسة', ['📚', '✏️', '🧠', '⏰', '🎯', '🚀', '📖', '✅']]
   ];
-  const MSGS = ['أحسنت! أنا فخور بك 🌟', 'استمر، أنت تتحسن كل يوم 💪', 'لا تستسلم، المحاولة القادمة أفضل ❤️', 'أنهِ واجبك اليوم وتنتظرك مفاجأة 🎁'];
+  const MSGS_M = ['أحسنت! أنا فخور بك 🌟', 'استمر، أنت تتحسن كل يوم 💪', 'لا تستسلم، المحاولة القادمة أفضل ❤️', 'أنهِ واجبك اليوم وتنتظرك مفاجأة 🎁'];
+  const MSGS_F = ['أحسنتِ! أنا فخور بكِ 🌟', 'استمري، أنتِ تتحسنين كل يوم 💪', 'لا تستسلمي، المحاولة القادمة أفضل ❤️', 'أنهي واجبكِ اليوم وتنتظركِ مفاجأة 🎁'];
+  const msgsFor = p => p && p.gender === 'f' ? MSGS_F : MSGS_M;
   function kidHtml(p, period) {
     const NQ = N(), subs = NQ.SUBJECTS.filter(s => s.grade === p.grade);
     if (runRoutines(p)) NQ.persist();
@@ -521,7 +523,7 @@
             const c = x.st.done ? (x.st.rec ? lvlColor(x.st.rec.pct) : 'var(--ok)') : x.st.late ? 'var(--bad)' : 'var(--accent)';
             return `<li><span class="dot" style="background:${c}"></span><div><b>${esc(x.t.title)}</b><small>${x.s.icon} ${esc(x.s.name)} · ${x.st.done ? (x.st.rec ? `تم ${x.st.late ? 'بعد الموعد' : 'في الموعد'} · ${NQ.fmtDate(x.st.rec.date).split('،')[0]}` : 'تم') : dueTxt(x.t.due)}</small></div>
               ${x.st.rec ? `<button type="button" class="pct linkish" style="color:${c}" data-rec="${x.st.rec.id}">${num(x.st.rec.pct)}٪</button>` : x.st.done ? '<span class="pct" style="color:var(--ok)">✓</span>' : `<button type="button" class="linkish" data-tdel="${esc(x.t.id)}">إلغاء</button>`}</li>`;
-          }).join('')}</ul>` : '<p class="hint" style="margin:8px 0 0">لا توجد واجبات بعد. اختر درساً، أو «مراجعة الأخطاء» ليحل الطالب الأسئلة التي أخطأ فيها من قبل.</p>'}
+          }).join('')}</ul>` : '<p class="hint" style="margin:8px 0 0">لا توجد واجبات بعد. اختر درساً، أو «مراجعة الأخطاء» ' + gx(p, 'ليحل الطالب الأسئلة التي أخطأ', 'لتحل الطالبة الأسئلة التي أخطأت') + ' فيها من قبل.</p>'}
         </div>`;
     parts.compare = `
         <div class="card px-card">
@@ -540,12 +542,12 @@
         <div class="pg-row"><h2>📝 آخر الاختبارات</h2><small class="muted">اضغط على أي اختبار لرؤية كل سؤال وإجابة الطالب</small></div>
         ${recent.length ? `<ul class="pg-list">${recent.map(r => `<li><span class="dot" style="background:${lvlColor(r.pct)}"></span>
           <div><b>${esc(r.title)}</b><small>${esc(subjName(r))} · ${r.mode === 'exam' ? 'اختبار' : 'تدريب'} · ${NQ.fmtDate(r.date)}</small></div>
-          <span class="pct" style="color:${lvlColor(r.pct)}">${num(r.pct)}٪</span><button type="button" class="btn ghost small" data-rec="${r.id}">التفاصيل</button></li>`).join('')}</ul>` : '<p class="empty">لم يحل أي اختبار بعد.</p>'}
+          <span class="pct" style="color:${lvlColor(r.pct)}">${num(r.pct)}٪</span><button type="button" class="btn ghost small" data-rec="${r.id}">التفاصيل</button></li>`).join('')}</ul>` : `<p class="empty">${gx(p, 'لم يحل', 'لم تحل')} أي اختبار بعد.</p>`}
       </section>`;
     parts.time = `
         <div class="card px-card">
           <h2>⏰ وقت المذاكرة</h2>
-          <small class="muted">متى يذاكر؟ (عدد الأسئلة في آخر 30 يوماً)</small>
+          <small class="muted">متى ${gx(p, 'يذاكر', 'تذاكر')}؟ (عدد الأسئلة في آخر 30 يوماً)</small>
           <div class="px-tod">${tod.map(b => `<div><span>${b.t}<small>${b.s}</small></span><div class="db-bar"><i style="width:${Math.round(b.n / todMax * 100)}%;background:var(--brand)"></i></div><b>${num(b.n)}</b></div>`).join('')}</div>
           <form class="px-form" id="px-lim">
             <label><span>يُسمح من</span><select id="px-lf"><option value="">أي وقت</option>${HOURS.map(h => `<option value="${h}" ${L.from === h ? 'selected' : ''}>${hourTxt(h)}</option>`).join('')}</select></label>
@@ -558,9 +560,9 @@
     parts.msg = `
         <div class="card px-card">
           <h2>💌 رسالة تشجيع</h2>
-          <small class="muted">تظهر للطالب أول ما يفتح صفحته، ويستطيع الرد عليها بتفاعل</small>
+          <small class="muted">${gx(p, 'تظهر للطالب أول ما يفتح صفحته، ويستطيع', 'تظهر للطالبة أول ما تفتح صفحتها، وتستطيع')} الرد عليها بتفاعل</small>
           ${p.msg && p.msg.text ? `<div class="px-sent"><p>«${esc(p.msg.text)}»</p><small>${p.msg.seen ? `قرأها ✓ · ${NQ.fmtDate(p.msg.seen)}${p.msg.re ? ` · ردّ: <span class="px-re">${esc(p.msg.re)}</span>` : ''}` : `أُرسلت ${NQ.fmtDate(p.msg.t)} · لم تُقرأ بعد`}</small></div>` : ''}
-          <div class="px-chips">${MSGS.map((m, i) => `<button type="button" class="chip-b" data-msgq="${i}">${esc(m)}</button>`).join('')}</div>
+          <div class="px-chips">${msgsFor(p).map((m, i) => `<button type="button" class="chip-b" data-msgq="${i}">${esc(m)}</button>`).join('')}</div>
           <form class="px-form" id="px-msg"><label class="wide"><span class="sr">نص الرسالة</span><textarea id="px-mt" maxlength="140" rows="2" placeholder="اكتب رسالة قصيرة…" required></textarea></label><button class="btn" type="submit">إرسال</button></form>
           <div class="px-emojis" role="group" aria-label="رموز تعبيرية للرسالة">${EMOJIS.map(([g, list]) => `<div class="px-emo-row"><small>${g}</small><div>${list.map(e => `<button type="button" class="px-emo" data-emo="${e}" aria-label="أضف ${e}">${e}</button>`).join('')}</div></div>`).join('')}</div>
         </div>`;
@@ -584,11 +586,11 @@
   }
   // أوسمة آخر 7 أيام مع زر تهنئة جاهز
   function weekBadgesHtml(p) {
-    const G = Gm(), list = G && G._badges ? G._badges() : [];
+    const G = Gm(), list = G && G._badges ? G._badges(p) : [];
     const got = list.filter(b => p.badges && p.badges[b.id] > Date.now() - 7 * DAY).sort((a, b) => p.badges[b.id] - p.badges[a.id]);
     if (!got.length) return '';
     return `<section class="card px-card"><h2>🎖️ أوسمة هذا الأسبوع</h2><div class="px-badges">${got.map(b => `<div class="px-badge"><span aria-hidden="true">${b.icon}</span><div><b>${esc(b.name)}</b><small>${N().fmtDate(p.badges[b.id]).split('،')[0]}</small></div>
-      <button type="button" class="btn ghost small" data-congrats="${esc(b.id)}">هنّئه 🎉</button></div>`).join('')}</div></section>`;
+      <button type="button" class="btn ghost small" data-congrats="${esc(b.id)}">${gx(p, 'هنّئه', 'هنّئها')} 🎉</button></div>`).join('')}</div></section>`;
   }
   function bindKid(p, rerender) {
     const NQ = N(), app = NQ.app;
@@ -630,8 +632,8 @@
     // إيقاف الواجب المتكرر (يبقى محفوظاً بعلامة إيقاف حتى لا تعيده مزامنة جهاز آخر)
     app.querySelectorAll('[data-rtoff]').forEach(b => b.onclick = () => { const r = (p.routines || []).find(x => x.id === b.dataset.rtoff); if (r) { r.off = Date.now(); NQ.persist(); NQ.toast('تم إيقاف الواجب المتكرر'); rerender(); } });
     app.querySelectorAll('[data-congrats]').forEach(b => b.onclick = () => {
-      const G = Gm(), bd = (G && G._badges ? G._badges() : []).find(x => x.id === b.dataset.congrats); if (!bd) return;
-      p.msg = { text: `مبروك وسام «${bd.name}» ${bd.icon} أنا فخور بك! 🌟`.slice(0, 140), t: Date.now(), seen: null };
+      const G = Gm(), bd = (G && G._badges ? G._badges(p) : []).find(x => x.id === b.dataset.congrats); if (!bd) return;
+      p.msg = { text: `مبروك وسام «${bd.name}» ${bd.icon} أنا فخور ${gx(p, 'بك', 'بكِ')}! 🌟`.slice(0, 140), t: Date.now(), seen: null };
       NQ.persist(); NQ.toast('تم إرسال التهنئة ✓'); rerender();
     });
     app.querySelectorAll('[data-rec]').forEach(b => b.onclick = () => { const r = p.records.find(x => String(x.id) === b.dataset.rec); if (r) showDetails(r); });
@@ -645,7 +647,7 @@
       NQ.persist(); NQ.toast('تم حفظ أوقات المذاكرة ✓'); rerender();
     };
     const mt = document.getElementById('px-mt');
-    app.querySelectorAll('[data-msgq]').forEach(b => b.onclick = () => { mt.value = MSGS[+b.dataset.msgq]; mt.focus(); });
+    app.querySelectorAll('[data-msgq]').forEach(b => b.onclick = () => { mt.value = msgsFor(p)[+b.dataset.msgq]; mt.focus(); });
     // إدراج الرمز مكان المؤشر (مع احترام الحد الأقصى 140 حرفاً)
     app.querySelectorAll('[data-emo]').forEach(b => b.onclick = () => {
       const e = b.dataset.emo, s = mt.selectionStart ?? mt.value.length, en = mt.selectionEnd ?? s;
@@ -692,7 +694,7 @@
     const tasks = (p.tasks || []).filter(t => t.created >= from || !taskStatus(p, t).done).map(t => ({ t, st: taskStatus(p, t), s: NQ.subjectById(t.sid) })).filter(x => x.s);
     const dt = d => d.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' });
     const tips = [];
-    if (a == null) tips.push('لم يحل الطالب أي اختبار هذا الأسبوع، يُنصح بتحديد وقت ثابت للمذاكرة يومياً.');
+    if (a == null) tips.push(gx(p, 'لم يحل الطالب', 'لم تحل الطالبة') + ' أي اختبار هذا الأسبوع، يُنصح بتحديد وقت ثابت للمذاكرة يومياً.');
     else if (b != null && a < b - 4) tips.push(`انخفض المتوسط ${num(b - a)} درجات عن الأسبوع السابق.`);
     else if (b != null && a > b + 4) tips.push(`تحسّن المتوسط ${num(a - b)} درجات عن الأسبوع السابق 👏`);
     if (weak.length) tips.push(`يُنصح بمراجعة: ${weak.slice(0, 3).map(w => w.name).join('، ')}.`);

@@ -36,8 +36,8 @@
 
   /* ================= النقاط والمستويات ================= */
   const LEVELS = [
-    { xp: 0, name: 'مبتدئ', icon: '🌱' }, { xp: 200, name: 'مجتهد', icon: '📘' }, { xp: 600, name: 'متفوق', icon: '🏅' },
-    { xp: 1200, name: 'نجم', icon: '⭐' }, { xp: 2500, name: 'بطل', icon: '🏆' }, { xp: 5000, name: 'أسطورة', icon: '👑' }
+    { xp: 0, name: 'مبتدئ', nameF: 'مبتدئة', icon: '🌱' }, { xp: 200, name: 'مجتهد', nameF: 'مجتهدة', icon: '📘' }, { xp: 600, name: 'متفوق', nameF: 'متفوقة', icon: '🏅' },
+    { xp: 1200, name: 'نجم', nameF: 'نجمة', icon: '⭐' }, { xp: 2500, name: 'بطل', nameF: 'بطلة', icon: '🏆' }, { xp: 5000, name: 'أسطورة', nameF: 'أسطورة', icon: '👑' }
   ];
   const LEAGUES = [{ min: 0, name: 'الدوري البرونزي', icon: '🥉', id: 'b' }, { min: 600, name: 'الدوري الفضي', icon: '🥈', id: 's' }, { min: 2500, name: 'الدوري الذهبي', icon: '🥇', id: 'g' }];
   const recXp = r => r.xp != null ? r.xp : Math.round((r.score || 0) * (r.mode === 'exam' ? 10 : 5));
@@ -47,11 +47,17 @@
     return p.records.filter(r => weekKey(r.date) === wk).reduce((a, r) => a + recXp(r), 0) +
       bonusList(p).filter(b => weekKey(b.t) === wk).reduce((a, b) => a + b.xp, 0);
   }
-  function levelOf(xp) {
+  // p اختياري: لعرض اسم المستوى بصيغة الطالبة
+  const isF = p => !!p && (p.gender === 'f' || p.g === 'f');
+  const lvName = (L, p) => L ? (isF(p) && L.nameF ? L.nameF : L.name) : '';
+  function levelOf(xp, p) {
     let i = 0; while (i < LEVELS.length - 1 && xp >= LEVELS[i + 1].xp) i++;
     const L = LEVELS[i], nx = LEVELS[i + 1];
-    return { i, ...L, next: nx || null, prog: nx ? (xp - L.xp) / (nx.xp - L.xp) : 1 };
+    return { i, ...L, name: lvName(L, p), next: nx ? { ...nx, name: lvName(nx, p) } : null, prog: nx ? (xp - L.xp) / (nx.xp - L.xp) : 1 };
   }
+  // صياغة حسب الطالب الحالي، أو طالب محدد
+  const gf = (m, f) => isF(N().cur()) ? f : m;
+  const gp = (p, m, f) => isF(p) ? f : m;
   const leagueOf = xp => LEAGUES.slice().reverse().find(l => xp >= l.min);
   function addBonus(p, xp, why) { bonusList(p).push({ t: Date.now(), xp, why }); if (p.bonus.length > 300) p.bonus = p.bonus.slice(-300); }
   const goalOf = p => p.goal || 20;
@@ -72,27 +78,28 @@
 
   /* ================= الأوسمة ================= */
   const BADGES = [
-    { id: 'first', icon: '🎯', name: 'أول خطوة', desc: 'حل أول اختبار' },
-    { id: 'tests10', icon: '📚', name: 'مثابر', desc: 'حل 10 اختبارات' },
-    { id: 'tests50', icon: '🏋️', name: 'لا يتوقف', desc: 'حل 50 اختباراً' },
+    { id: 'first', icon: '🎯', name: 'أول خطوة', desc: 'حل أول اختبار', descF: 'حلّت أول اختبار' },
+    { id: 'tests10', icon: '📚', name: 'مثابر', desc: 'حل 10 اختبارات', nameF: 'مثابرة', descF: 'حلّت 10 اختبارات' },
+    { id: 'tests50', icon: '🏋️', name: 'لا يتوقف', desc: 'حل 50 اختباراً', nameF: 'لا تتوقف', descF: 'حلّت 50 اختباراً' },
     { id: 'perfect', icon: '💯', name: 'علامة كاملة', desc: '100% في اختبار من 5 أسئلة أو أكثر' },
-    { id: 'q100', icon: '🔢', name: 'مئة سؤال', desc: 'أجاب على 100 سؤال' },
-    { id: 'q500', icon: '🧠', name: 'خمسمئة سؤال', desc: 'أجاب على 500 سؤال' },
-    { id: 'streak3', icon: '🔥', name: 'ثلاثة أيام', desc: 'ذاكر 3 أيام متتالية' },
-    { id: 'streak7', icon: '☄️', name: 'أسبوع كامل', desc: 'ذاكر 7 أيام متتالية' },
-    { id: 'goal', icon: '🎯', name: 'هدف اليوم', desc: 'حقق هدفه اليومي' },
-    { id: 'goal5', icon: '🗓️', name: 'منضبط', desc: 'حقق هدفه اليومي 5 مرات' },
+    { id: 'q100', icon: '🔢', name: 'مئة سؤال', desc: 'أجاب على 100 سؤال', descF: 'أجابت على 100 سؤال' },
+    { id: 'q500', icon: '🧠', name: 'خمسمئة سؤال', desc: 'أجاب على 500 سؤال', descF: 'أجابت على 500 سؤال' },
+    { id: 'streak3', icon: '🔥', name: 'ثلاثة أيام', desc: 'ذاكر 3 أيام متتالية', descF: 'ذاكرت 3 أيام متتالية' },
+    { id: 'streak7', icon: '☄️', name: 'أسبوع كامل', desc: 'ذاكر 7 أيام متتالية', descF: 'ذاكرت 7 أيام متتالية' },
+    { id: 'goal', icon: '🎯', name: 'هدف اليوم', desc: 'حقق هدفه اليومي', descF: 'حققت هدفها اليومي' },
+    { id: 'goal5', icon: '🗓️', name: 'منضبط', desc: 'حقق هدفه اليومي 5 مرات', nameF: 'منضبطة', descF: 'حققت هدفها اليومي 5 مرات' },
     { id: 'unit', icon: '🧩', name: 'أنهيت وحدة', desc: 'كل دروس وحدة بدرجة 65% أو أكثر' },
     { id: 'cert', icon: '📜', name: 'شهادة تفوق', desc: 'وحدة كاملة بمتوسط 90% أو أكثر' },
-    { id: 'mistakes', icon: '🧹', name: 'صائد الأخطاء', desc: '100% في مراجعة الأخطاء' },
-    { id: 'allsub', icon: '🎒', name: 'كل المواد', desc: 'حل اختباراً في كل مواد صفه' },
-    { id: 'daily', icon: '📅', name: 'تحدي اليوم', desc: 'شارك في تحدي اليوم' },
-    { id: 'daily5', icon: '📆', name: 'مواظب على التحدي', desc: 'شارك في تحدي اليوم 5 مرات' },
-    { id: 'duelwin', icon: '⚔️', name: 'أول فوز', desc: 'فاز في تحدي صديق' },
-    { id: 'team', icon: '👥', name: 'روح الفريق', desc: 'انضم إلى فريق' },
-    { id: 'lvl3', icon: '🏅', name: 'متفوق', desc: 'وصل لمستوى متفوق' },
-    { id: 'lvl5', icon: '🏆', name: 'بطل', desc: 'وصل لمستوى بطل' }
+    { id: 'mistakes', icon: '🧹', name: 'صائد الأخطاء', desc: '100% في مراجعة الأخطاء', nameF: 'صائدة الأخطاء' },
+    { id: 'allsub', icon: '🎒', name: 'كل المواد', desc: 'حل اختباراً في كل مواد صفه', descF: 'حلّت اختباراً في كل مواد صفها' },
+    { id: 'daily', icon: '📅', name: 'تحدي اليوم', desc: 'شارك في تحدي اليوم', descF: 'شاركت في تحدي اليوم' },
+    { id: 'daily5', icon: '📆', name: 'مواظب على التحدي', desc: 'شارك في تحدي اليوم 5 مرات', nameF: 'مواظبة على التحدي', descF: 'شاركت في تحدي اليوم 5 مرات' },
+    { id: 'duelwin', icon: '⚔️', name: 'أول فوز', desc: 'فاز في تحدي صديق', descF: 'فازت في تحدي صديقة' },
+    { id: 'team', icon: '👥', name: 'روح الفريق', desc: 'انضم إلى فريق', descF: 'انضمت إلى فريق' },
+    { id: 'lvl3', icon: '🏅', name: 'متفوق', desc: 'وصل لمستوى متفوق', nameF: 'متفوقة', descF: 'وصلت لمستوى متفوقة' },
+    { id: 'lvl5', icon: '🏆', name: 'بطل', desc: 'وصل لمستوى بطل', nameF: 'بطلة', descF: 'وصلت لمستوى بطلة' }
   ];
+  const badgesFor = p => isF(p) ? BADGES.map(b => ({ ...b, name: b.nameF || b.name, desc: b.descF || b.desc })) : BADGES;
   function unitInfo(p, s, u) {
     const best = {};
     p.records.forEach(r => { if (r.subjectId === s.id && r.key !== 'mistakes') best[r.key] = Math.max(best[r.key] || 0, r.pct); });
@@ -124,7 +131,7 @@
   function awardBadges(p) {
     p.badges = p.badges || {};
     const ok = badgeChecks(p), got = [];
-    BADGES.forEach(b => { if (ok[b.id] && !p.badges[b.id]) { p.badges[b.id] = Date.now(); got.push(b); } });
+    badgesFor(p).forEach(b => { if (ok[b.id] && !p.badges[b.id]) { p.badges[b.id] = Date.now(); got.push(b); } });
     return got;
   }
   function checkRewards(p) {
@@ -141,7 +148,7 @@
     const d = today();
     p.goalPaid = p.goalPaid || {};
     if (!p.goalPaid[d] && answeredOn(p, d) >= goalOf(p)) { p.goalPaid[d] = 1; addBonus(p, 25, 'هدف اليوم'); ex.bonus.push({ xp: 25, why: '🎯 حققت هدف اليوم' }); }
-    const lb = levelOf(before), la = levelOf(totalXp(p));
+    const lb = levelOf(before, p), la = levelOf(totalXp(p), p);
     if (la.i > lb.i) ex.levelUp = la;
     ex.badges = awardBadges(p);
     ex.rewards = checkRewards(p);
@@ -152,14 +159,14 @@
   function resultExtras(rec, ex) {
     const el = document.getElementById('gm-result'); if (!el) return;
     const p = N().cur(); if (!p) return;
-    const L = levelOf(totalXp(p));
+    const L = levelOf(totalXp(p), p);
     ex = ex || { xp: rec.xp || 0, bonus: [], badges: [], rewards: [] };
     el.innerHTML = `<div class="gm-res">
       <span class="gm-xp">+${num(ex.xp)} نقطة</span>
       ${ex.bonus.map(b => `<span class="gm-xp alt">+${b.xp} ${esc(b.why)}</span>`).join('')}
       ${ex.levelUp ? `<div class="gm-levelup">🎉 مستوى جديد: ${L.icon} <b>${esc(L.name)}</b></div>` : ''}
       ${ex.badges.map(b => `<div class="gm-newbadge"><span>${b.icon}</span> وسام جديد: <b>${esc(b.name)}</b></div>`).join('')}
-      ${ex.rewards.map(r => `<div class="gm-newbadge reward"><span>🎁</span> حققت هدف المكافأة: <b>${esc(r.text)}</b> — أخبر ولي أمرك!</div>`).join('')}
+      ${ex.rewards.map(r => `<div class="gm-newbadge reward"><span>🎁</span> حققت هدف المكافأة: <b>${esc(r.text)}</b> — ${gf('أخبر', 'أخبري')} ولي أمرك!</div>`).join('')}
       ${rec.kind === 'daily' && !ex.xp ? '<p class="hint">التحدي محسوب مرة واحدة في اليوم، هذه محاولة تدريب بدون نقاط.</p>' : ''}
     </div>`;
   }
@@ -167,10 +174,10 @@
   /* ================= لوحة الطالب: إضافات ================= */
   function homeExtras() {
     const el = document.getElementById('gm-home'); const p = N().cur(); if (!el || !p) return;
-    const xp = totalXp(p), L = levelOf(xp), lg = leagueOf(xp);
+    const xp = totalXp(p), L = levelOf(xp, p), lg = leagueOf(xp);
     const d = today(), ans = answeredOn(p, d), goal = goalOf(p), gp = Math.min(1, ans / goal);
     const wk = xpIn(p, weekKey());
-    const got = BADGES.filter(b => p.badges && p.badges[b.id]).sort((a, b) => p.badges[b.id] - p.badges[a.id]);
+    const got = badgesFor(p).filter(b => p.badges && p.badges[b.id]).sort((a, b) => p.badges[b.id] - p.badges[a.id]);
     const rewards = (p.rewards || []).filter(r => !r.claimed);
     const dailyDone = p.daily && p.daily[d];
     el.innerHTML = `
@@ -186,7 +193,7 @@
           <div class="gm-lv-top"><span class="gm-lv-ic" aria-hidden="true">${gp >= 1 ? '✅' : '🎯'}</span>
             <div><b>هدف اليوم</b><small>${num(ans)} من ${num(goal)} سؤال${gp >= 1 ? ' · أحسنت! +25' : ''}</small></div></div>
           <div class="db-bar"><i style="width:${Math.round(gp * 100)}%;background:var(--ok)"></i></div>
-          <small class="muted">${gp >= 1 ? 'حققت هدفك اليوم 🎉' : 'أكمل الهدف لتحصل على 25 نقطة إضافية'}</small>
+          <small class="muted">${gp >= 1 ? 'حققت هدفك اليوم 🎉' : gf('أكمل الهدف لتحصل على 25 نقطة إضافية', 'أكملي الهدف لتحصلي على 25 نقطة إضافية')}</small>
         </div>
       </section>
       <nav class="gm-quick" aria-label="المنافسة">
@@ -198,7 +205,7 @@
       </nav>
       ${rewards.length ? `<section class="card gm-rewards"><h2>🎁 مكافآتي من ولي الأمر</h2>${rewards.map(r => {
         const pr = Math.min(1, xp / r.xp);
-        return `<div class="gm-rw"><div><b>${esc(r.text)}</b><small>${r.done ? 'تحققت! 🎉 أخبر ولي أمرك' : `${num(xp)} / ${num(r.xp)} نقطة`}</small></div>
+        return `<div class="gm-rw"><div><b>${esc(r.text)}</b><small>${r.done ? 'تحققت! 🎉 ' + gf('أخبر', 'أخبري') + ' ولي أمرك' : `${num(xp)} / ${num(r.xp)} نقطة`}</small></div>
           <div class="db-bar"><i style="width:${Math.round(pr * 100)}%;background:${r.done ? 'var(--ok)' : 'var(--accent)'}"></i></div></div>`;
       }).join('')}</section>` : ''}
       ${got.length ? `<div class="gm-badges-mini">${got.slice(0, 6).map(b => `<span title="${esc(b.name)}">${b.icon}</span>`).join('')}<a href="#badges">كل الأوسمة ←</a></div>` : ''}`;
@@ -293,7 +300,7 @@
     }
   };
   function entryOf(p) {
-    const wk = weekKey(), pw = prevWeekKey(), xp = totalXp(p), L = levelOf(xp);
+    const wk = weekKey(), pw = prevWeekKey(), xp = totalXp(p), L = levelOf(xp, p);
     const a = avgIn(p, wk), b = avgIn(p, pw), d = today();
     const subj = {}; p.records.filter(r => weekKey(r.date) === wk).forEach(r => { subj[r.subjectId] = (subj[r.subjectId] || 0) + recXp(r); });
     const duels = {};
@@ -301,7 +308,7 @@
       .forEach(([c, v]) => { duels[c] = { subject: v.subject, score: v.score == null ? null : v.score, total: v.total || null, secs: v.secs || null, at: v.at || null }; });
     return {
       pid: p.id, name: p.hidden ? 'طالب' : firstName(p.name), avatar: p.hidden ? null : (p.avatar == null ? null : p.avatar),
-      grade: p.grade, hidden: !!p.hidden, team: p.team || null, xp, level: L.i, week: wk, weekXp: xpIn(p, wk),
+      grade: p.grade, g: p.gender === 'f' ? 'f' : undefined, hidden: !!p.hidden, team: p.team || null, xp, level: L.i, week: wk, weekXp: xpIn(p, wk),
       stage: window.NQSchools ? window.NQSchools.stageOf(p.grade) : null,
       cls: (m => m ? { cid: m.cid, sid: m.sid, region: m.region, school: m.school, section: m.section } : null)(window.NQSchools ? window.NQSchools.primary(p) : null),
       weekAvg: a.avg, weekN: a.n, prevAvg: b.avg, prevN: b.n, subj,
@@ -381,7 +388,7 @@
         ${meIdx >= 0 ? `<p class="gm-mine">ترتيبك: <b>${medal(meIdx)}</b> من ${num(rows.length)}</p>` : ''}
         ${rows.length ? `<ol class="gm-board">${rows.slice(0, 50).map((x, i) => `<li class="${x.e.pid === p.id ? 'me' : ''}">
             <span class="gm-rank">${medal(i)}</span>${avatarOfEntry(x.e)}
-            <span class="gm-nm"><b>${esc(x.e.name)}${x.e.pid === p.id ? ' (أنت)' : ''}</b><small>${LEVELS[x.e.level || 0].icon} ${esc(LEVELS[x.e.level || 0].name)}${extra(x.e)}${x.e.team ? ' · 👥 ' + esc(x.e.team.name) : ''}</small></span>
+            <span class="gm-nm"><b>${esc(x.e.name)}${x.e.pid === p.id ? ' (أنت)' : ''}</b><small>${LEVELS[x.e.level || 0].icon} ${esc(lvName(LEVELS[x.e.level || 0], x.e))}${extra(x.e)}${x.e.team ? ' · 👥 ' + esc(x.e.team.name) : ''}</small></span>
             <span class="gm-val">${boardTab === 'improved' ? (x.v > 0 ? '+' : '') + num(x.v) : num(x.v)} <small>${unit}</small></span></li>`).join('')}</ol>`
           : '<p class="empty">لا يوجد ترتيب بعد هذا الأسبوع. كن أول من يحصل على نقاط! 🚀</p>'}`;
     };
@@ -415,8 +422,8 @@
         <p class="sub">نفس الـ 10 أسئلة لكل طلاب ${esc(p.grade)} اليوم من كل المواد. أول محاولة فقط هي المحسوبة: 15 نقطة لكل إجابة صحيحة و30 إضافية للعلامة الكاملة. الترتيب بالدرجة ثم الأسرع.</p></header>
       <div class="card gm-daily">
         ${mine ? `<p class="gm-done">✅ أنهيت تحدي اليوم: <b>${num(mine.score)} من ${num(mine.total)}</b> في ${NQ.fmtTime(mine.secs)}</p>
-          <button class="btn ghost" id="dstart">تدرّب عليه مرة أخرى (بدون نقاط)</button>`
-        : `<button class="btn big" id="dstart">ابدأ تحدي اليوم ←</button>`}
+          <button class="btn ghost" id="dstart">${gf('تدرّب', 'تدرّبي')} عليه مرة أخرى (بدون نقاط)</button>`
+        : `<button class="btn big" id="dstart">${gf('ابدأ', 'ابدئي')} تحدي اليوم ←</button>`}
       </div>
       <h2>ترتيب اليوم</h2><div id="dbody">${loading()}</div></section>`;
     document.getElementById('dstart').onclick = () => {
@@ -454,19 +461,19 @@
     const my = Object.entries(p.duels || {}).sort((a, b) => (b[1].created || 0) - (a[1].created || 0)).slice(0, 15);
     app.innerHTML = `<section class="gm-page">${tabs('duel')}
       <header class="gm-head"><h1>⚔️ تحدّي صديق</h1>
-        <p class="sub">أنشئ تحدياً وأرسل الكود لصديقك. كل واحد يحل نفس 8 أسئلة في الوقت الذي يناسبه، والفائز صاحب الدرجة الأعلى (ثم الأسرع). الفوز = 30 نقطة إضافية، والتعادل = 15.</p></header>
+        <p class="sub">${gf('أنشئ تحدياً وأرسل الكود لصديقك', 'أنشئي تحدياً وأرسلي الكود لصديقتك')}. كل واحد يحل نفس 8 أسئلة في الوقت الذي يناسبه، والفائز صاحب الدرجة الأعلى (ثم الأسرع). الفوز = 30 نقطة إضافية، والتعادل = 15.</p></header>
       <div class="gm-two">
         <form class="card" id="dc"><h2>إنشاء تحدٍّ جديد</h2>
-          <label class="pin-lbl" for="dsub">اختر المادة</label>
+          <label class="pin-lbl" for="dsub">${gf('اختر', 'اختاري')} المادة</label>
           <select id="dsub">${subs.map(s => `<option value="${s.id}">${s.icon} ${esc(s.name)}</option>`).join('')}</select>
           <button class="btn" type="submit">إنشاء الكود ←</button></form>
         <form class="card" id="dj"><h2>عندي كود من صديق</h2>
-          <label class="pin-lbl" for="dcode">اكتب الكود</label>
+          <label class="pin-lbl" for="dcode">${gf('اكتب', 'اكتبي')} الكود</label>
           <input id="dcode" class="gm-code-in" maxlength="6" autocomplete="off" placeholder="مثال: K7Q2M" dir="ltr">
           <p class="err" id="dj-err" role="alert"></p>
           <button class="btn" type="submit">انضم ←</button></form>
       </div>
-      ${my.length ? `<h2>تحدياتي</h2><ul class="db-list gm-duels">${my.map(([c, v]) => { const s = NQ.subjectById(v.subject); return `<li><span class="ic" aria-hidden="true">${s ? s.icon : '⚔️'}</span><div><b dir="ltr">${esc(c)}</b><small>${s ? esc(s.name) : ''} · ${v.score == null ? 'لم تحل بعد' : 'درجتك ' + num(v.score) + '/' + num(v.total)}</small></div><a class="btn small" href="#duel-${esc(c)}">فتح</a></li>`; }).join('')}</ul>` : ''}
+      ${my.length ? `<h2>تحدياتي</h2><ul class="db-list gm-duels">${my.map(([c, v]) => { const s = NQ.subjectById(v.subject); return `<li><span class="ic" aria-hidden="true">${s ? s.icon : '⚔️'}</span><div><b dir="ltr">${esc(c)}</b><small>${s ? esc(s.name) : ''} · ${v.score == null ? gf('لم تحل بعد', 'لم تحلّي بعد') : 'درجتك ' + num(v.score) + '/' + num(v.total)}</small></div><a class="btn small" href="#duel-${esc(c)}">فتح</a></li>`; }).join('')}</ul>` : ''}
     </section>`;
     document.getElementById('dc').onsubmit = e => {
       e.preventDefault();
@@ -477,7 +484,7 @@
     document.getElementById('dj').onsubmit = async e => {
       e.preventDefault();
       const code = cleanCode(document.getElementById('dcode').value), err = document.getElementById('dj-err');
-      if (code.length < 4) { err.textContent = 'اكتب الكود كاملاً.'; return; }
+      if (code.length < 4) { err.textContent = gf('اكتب الكود كاملاً.', 'اكتبي الكود كاملاً.'); return; }
       err.textContent = '⏳ جارٍ البحث…';
       const sid = await findDuel(code);
       if (!sid || !NQ.subjectById(sid)) { err.textContent = Backend.mode === 'local' ? 'لم نجد هذا الكود على هذا الجهاز. التحدي بين جهازين يحتاج اتصالاً بالمنصة.' : 'لم نجد هذا الكود. تأكد منه، أو انتظر دقيقة حتى يُحفظ تحدي صديقك.'; return; }
@@ -493,9 +500,9 @@
     const s = NQ.subjectById(mine.subject);
     app.innerHTML = `<section class="gm-page">${tabs('duel')}
       <header class="gm-head"><h1>⚔️ تحدي <span dir="ltr">${esc(code)}</span></h1><p class="sub">${s ? s.icon + ' ' + esc(s.name) : ''} · 8 أسئلة</p></header>
-      ${mine.creator ? `<div class="card gm-share"><p>أرسل هذا الكود لصديقك ليدخل من «تحدّي صديق ← عندي كود»:</p><div class="gm-code" dir="ltr">${esc(code)}</div>
+      ${mine.creator ? `<div class="card gm-share"><p>${gf('أرسل هذا الكود لصديقك ليدخل', 'أرسلي هذا الكود لصديقتك لتدخل')} من «تحدّي صديق ← عندي كود»:</p><div class="gm-code" dir="ltr">${esc(code)}</div>
         <button type="button" class="btn ghost small" id="cp">نسخ الكود</button></div>` : ''}
-      <div class="card">${mine.score == null ? `<button class="btn big" id="dplay">ابدأ التحدي ←</button><p class="hint">لديك محاولة واحدة فقط.</p>`
+      <div class="card">${mine.score == null ? `<button class="btn big" id="dplay">${gf('ابدأ', 'ابدئي')} التحدي ←</button><p class="hint">لديك محاولة واحدة فقط.</p>`
         : `<p class="gm-done">✅ درجتك: <b>${num(mine.score)} من ${num(mine.total)}</b> في ${NQ.fmtTime(mine.secs || 0)}</p>`}</div>
       <h2>المتسابقون</h2><div id="dlist">${loading()}</div>
       <button type="button" class="btn ghost small" id="drf">↻ تحديث النتيجة</button></section>`;
@@ -541,7 +548,7 @@
   async function renderTeams() {
     const NQ = N(), p = NQ.cur(), app = NQ.app;
     app.innerHTML = `<section class="gm-page">${tabs('teams')}
-      <header class="gm-head"><h1>👥 الفرق</h1><p class="sub">انضم مع زملاء فصلك أو إخوتك في فريق واحد. نقاط الفريق = مجموع نقاط أعضائه هذا الأسبوع.</p></header>
+      <header class="gm-head"><h1>👥 الفرق</h1><p class="sub">${gf('انضم مع زملاء فصلك أو إخوتك', 'انضمي مع زميلات فصلك أو أخواتك')} في فريق واحد. نقاط الفريق = مجموع نقاط أعضائه هذا الأسبوع.</p></header>
       ${p.team ? `<div class="card gm-team"><div><small>فريقك</small><h2>👥 ${esc(p.team.name)}</h2><p>كود الانضمام: <b class="gm-code sm" dir="ltr">${esc(p.team.code)}</b></p></div>
           <div class="db-btns"><button type="button" class="btn ghost small" id="tcp">نسخ الكود</button><button type="button" class="btn ghost small" id="tleave">مغادرة الفريق</button></div></div>`
         : `<div class="gm-two">
@@ -552,11 +559,11 @@
       <h2>ترتيب الفرق هذا الأسبوع – ${esc(p.grade)}</h2><div id="tbody">${loading()}</div></section>`;
     const setTeam = t => { p.team = t; awardBadges(p); NQ.persist(); scheduleSync(); NQ.route(); };
     const tc = document.getElementById('tc');
-    if (tc) tc.onsubmit = e => { e.preventDefault(); const n = document.getElementById('tname').value.trim(); if (n.length < 2) { document.getElementById('tc-err').textContent = 'اكتب اسماً للفريق.'; return; } setTeam({ code: newCode(), name: n.slice(0, 24) }); NQ.toast('تم إنشاء الفريق ✓ أرسل الكود لزملائك'); };
+    if (tc) tc.onsubmit = e => { e.preventDefault(); const n = document.getElementById('tname').value.trim(); if (n.length < 2) { document.getElementById('tc-err').textContent = gf('اكتب اسماً للفريق.', 'اكتبي اسماً للفريق.'); return; } setTeam({ code: newCode(), name: n.slice(0, 24) }); NQ.toast('تم إنشاء الفريق ✓ ' + gf('أرسل الكود لزملائك', 'أرسلي الكود لزميلاتك')); };
     const tj = document.getElementById('tj');
     if (tj) tj.onsubmit = async e => {
       e.preventDefault(); const code = cleanCode(document.getElementById('tcode').value), err = document.getElementById('tj-err');
-      if (code.length < 4) { err.textContent = 'اكتب الكود كاملاً.'; return; }
+      if (code.length < 4) { err.textContent = gf('اكتب الكود كاملاً.', 'اكتبي الكود كاملاً.'); return; }
       const list = await Backend.list(true); const f = list.find(x => x.team && x.team.code === code);
       if (!f) { err.textContent = 'لم نجد فريقاً بهذا الكود.'; return; }
       setTeam({ code, name: f.team.name }); NQ.toast('انضممت إلى ' + f.team.name + ' ✓');
@@ -575,14 +582,14 @@
     const el = document.getElementById('tbody'); if (!el) return;
     el.innerHTML = rows.length ? `<ol class="gm-board teams">${rows.map((t, i) => `<li class="${p.team && p.team.code === t.code ? 'me' : ''}"><span class="gm-rank">${medal(i)}</span>
         <span class="gm-nm"><b>👥 ${esc(t.name)}</b><small>${t.members.map(m => esc(m.hidden ? 'طالب' : m.name)).join('، ')}</small></span>
-        <span class="gm-val">${num(t.xp)} <small>نقطة</small></span></li>`).join('')}</ol>` : '<p class="empty">لا توجد فرق بعد. أنشئ أول فريق!</p>';
+        <span class="gm-val">${num(t.xp)} <small>نقطة</small></span></li>`).join('')}</ol>` : '<p class="empty">لا توجد فرق بعد. ' + gf('أنشئ', 'أنشئي') + ' أول فريق!</p>';
   }
 
   /* ----- الأوسمة والشهادات ----- */
   function renderAchievements() {
     const NQ = N(), p = NQ.cur(), app = NQ.app;
     p.badges = p.badges || {};
-    const xp = totalXp(p), L = levelOf(xp), lg = leagueOf(xp), wk = weekKey();
+    const xp = totalXp(p), L = levelOf(xp, p), lg = leagueOf(xp), wk = weekKey();
     const subs = NQ.SUBJECTS.filter(s => s.grade === p.grade);
     const certs = [], near = [];
     subs.forEach(s => s.units.forEach(u => {
@@ -602,19 +609,19 @@
         <span class="chip-a">${lg.icon} ${esc(lg.name)}</span></header>
       <section class="card">
         <div class="pg-row"><h2>سلّم المستويات</h2><small class="muted">${L.next ? `باقي ${num(L.next.xp - xp)} نقطة للمستوى التالي` : 'أعلى مستوى 👑'}</small></div>
-        <div class="gm-ladder">${LEVELS.map((l, i) => `<div class="${i <= L.i ? 'on' : ''}${i === L.i ? ' now' : ''}"><span>${l.icon}</span><b>${esc(l.name)}</b><small>${num(l.xp)}+</small></div>`).join('')}</div>
+        <div class="gm-ladder">${LEVELS.map((l, i) => `<div class="${i <= L.i ? 'on' : ''}${i === L.i ? ' now' : ''}"><span>${l.icon}</span><b>${esc(lvName(l, p))}</b><small>${num(l.xp)}+</small></div>`).join('')}</div>
         <div class="db-bar" style="margin-top:12px"><i style="width:${Math.round(L.prog * 100)}%;background:var(--accent)"></i></div>
       </section>
       <section class="pg-grid2">
         <div class="card">
           <div class="pg-row"><h2>أوسمتي</h2><small class="muted">${num(nb)} / ${num(BADGES.length)}</small></div>
-          <div class="gm-badges">${BADGES.map(b => { const t = p.badges[b.id]; return `<div class="gm-badge${t ? ' got' : ''}"><span aria-hidden="true">${t ? b.icon : '🔒'}</span><b>${esc(b.name)}</b><small>${esc(b.desc)}</small>${t ? `<small class="when">${NQ.fmtDate(t).split('،')[0]}</small>` : ''}</div>`; }).join('')}</div>
+          <div class="gm-badges">${badgesFor(p).map(b => { const t = p.badges[b.id]; return `<div class="gm-badge${t ? ' got' : ''}"><span aria-hidden="true">${t ? b.icon : '🔒'}</span><b>${esc(b.name)}</b><small>${esc(b.desc)}</small>${t ? `<small class="when">${NQ.fmtDate(t).split('،')[0]}</small>` : ''}</div>`; }).join('')}</div>
         </div>
         <div class="pg-col">
           <div class="card">
             <h2>شهادات التقدير</h2>
             ${certs.length ? `<ul class="pg-list">${certs.map(c => `<li><span class="ic" aria-hidden="true">${c.s.icon}</span><div><b>${esc(c.u.name)}</b><small>${esc(c.s.name)} · متوسط ${num(c.avg)}٪</small></div><button type="button" class="btn small" data-cert="${c.s.id}|${c.u.id}">تنزيل</button></li>`).join('')}</ul>`
-              : '<p class="empty">أكمل كل دروس وحدة بمتوسط 90% أو أكثر لتحصل على شهادة باسمك 📜</p>'}
+              : '<p class="empty">' + gf('أكمل كل دروس وحدة بمتوسط 90% أو أكثر لتحصل', 'أكملي كل دروس وحدة بمتوسط 90% أو أكثر لتحصلي') + ' على شهادة باسمك 📜</p>'}
             ${near[0] ? `<p class="hint">الأقرب لك: ${esc(near[0].u.name.split(':')[0])} في ${esc(near[0].s.name)} — أنجزت ${num(near[0].got)} من ${num(near[0].total)} دروس</p>` : ''}
           </div>
           ${rewards.length ? `<div class="card"><h2>مكافآت ولي الأمر</h2><ul class="pg-list">${rewards.map(r => `<li><span class="ic" aria-hidden="true">${r.done ? '🎁' : '🔒'}</span><div><b>${esc(r.text)}</b>
@@ -777,7 +784,7 @@
         ${a.give ? `<button type="button" class="btn small" data-give="${a.give}">سلّمتها ✓</button>` : `<button type="button" class="btn ghost small" data-kid="${a.pid}">عرض</button>`}</div>`).join('')}</section>` : ''}
       ${people.length ? `<section class="pr-kids">${sums.map(({ p, k }) => {
         const need = (k.idle != null && k.idle >= 3) || (k.delta != null && k.delta <= -5) || !p.records.length;
-        const L = levelOf(k.xp);
+        const L = levelOf(k.xp, p);
         return `<article class="card pr-kid${need ? ' need' : ''}">
           <header>${NQ.avatarHtml(p, false)}<div><h2>${esc(p.name)}</h2><small>${esc(p.grade)} · ${L.icon} ${esc(L.name)} · ${num(k.xp)} نقطة</small></div>${need ? '<span class="pr-tag">بحاجة لتشجيع</span>' : ''}</header>
           <div class="pr-kid-mid">
@@ -813,7 +820,7 @@
   function renderParentKid(p, people) {
     const NQ = N(), app = NQ.app, X = window.NQP;
     if (X && X.view === 'report') return X.renderReport(p, () => renderParent());
-    const k = kidSummary(p, parentPeriod), L = levelOf(k.xp), lg = leagueOf(k.xp);
+    const k = kidSummary(p, parentPeriod), L = levelOf(k.xp, p), lg = leagueOf(k.xp);
     const maxN = Math.max(k.goal * 1.5, ...k.week.map(w => w.n));
     const weak = k.subs.flatMap(x => x.st.weak).sort((a, b) => a.pct - b.pct).slice(0, 4);
     const tries = key => p.records.filter(r => r.key === key).length;
@@ -980,5 +987,5 @@
     });
   }
 
-  window.NQGame = { init, route, xpFor, afterResult, resultExtras, homeExtras, unitBadge, mergeProfile, onPersist: () => scheduleSync(), backend: Backend, _levelOf: levelOf, _totalXp: totalXp, _leagueOf: leagueOf, _xpIn: xpIn, _weekKey: () => weekKey(), _goalOf: goalOf, _answeredOn: answeredOn, _badges: () => BADGES, _today: today, renderAchievements };
+  window.NQGame = { init, route, xpFor, afterResult, resultExtras, homeExtras, unitBadge, mergeProfile, onPersist: () => scheduleSync(), backend: Backend, _levelOf: levelOf, _lvName: lvName, _totalXp: totalXp, _leagueOf: leagueOf, _xpIn: xpIn, _weekKey: () => weekKey(), _goalOf: goalOf, _answeredOn: answeredOn, _badges: p => badgesFor(p), _today: today, renderAchievements };
 })();

@@ -812,7 +812,7 @@
     const find = v => { const [pid, cid] = v.split('|'); const p = NQ.store.profiles[pid]; const m = p && activeMems(p).find(x => x.cid === cid); return { p, m }; };
     NQ.app.querySelectorAll('[data-leave]').forEach(b => b.onclick = async () => {
       const { p, m } = find(b.dataset.leave); if (!m) return;
-      if (!(await NQ.ask(`إلغاء انضمام ${p.name} لفصل ${m.teacher || ''}؟ لن يرى المعلم درجاته بعد الآن.`, 'إلغاء الانضمام', true))) return;
+      if (!(await NQ.ask(`إلغاء انضمام ${p.name} لفصل ${m.teacher || ''}؟ لن يرى المعلم ${p.gender === 'f' ? 'درجاتها' : 'درجاته'} بعد الآن.`, 'إلغاء الانضمام', true))) return;
       try { await db.del('classes/' + m.cid + '/students/' + m.doc); m.left = Date.now(); m.t = Date.now(); after('تم إلغاء الانضمام'); } catch (e) { NQ.toast(errTxt(e)); }
     });
     NQ.app.querySelectorAll('[data-subjedit]').forEach(b => b.onclick = () => {
