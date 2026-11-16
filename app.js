@@ -913,6 +913,7 @@
             <div class="grade-tabs" role="radiogroup" aria-label="الصف الدراسي">
               ${GRADES.map(gr => `<button type="button" role="radio" class="grade-tab${gr === loginGrade ? ' on' : ''}" aria-checked="${gr === loginGrade}" data-lg="${esc(gr)}">${esc(gr)}</button>`).join('')}
             </div>
+            <div class="gen-row" role="radiogroup" aria-label="طالب أو طالبة"><button type="button" role="radio" class="grade-tab gen-b${wizData.gender === 'm' ? ' on' : ''}" aria-checked="${wizData.gender === 'm'}" data-gen="m">🧑‍🎓 طالب</button><button type="button" role="radio" class="grade-tab gen-b${wizData.gender === 'f' ? ' on' : ''}" aria-checked="${wizData.gender === 'f'}" data-gen="f">👩‍🎓 طالبة</button></div>
             <form id="lf" class="name-row" autocomplete="off">
               <label for="nm" class="sr">اسم الطالب</label>
               <input id="nm" value="${esc(wizData.name || '')}" placeholder="${loginGrade ? 'اكتب اسمك هنا' : 'اختر صفك أولاً'}" maxlength="30" required ${loginGrade ? '' : 'disabled'}>
@@ -927,7 +928,7 @@
           ${wizStep === 2 ? `
             <div class="wiz-preview">
               <span>الصف: <b>${esc(wizData.grade)}</b></span>
-              <span>الطالب: <b>${esc(wizData.name)}</b></span>
+              <span>${wizData.gender === 'f' ? 'الطالبة' : 'الطالب'}: <b>${esc(wizData.name)}</b></span>
             </div>
             <h2>اختر صورتك الرمزية</h2>
             ${avatarGrid(wizData.avatar)}
@@ -1028,6 +1029,11 @@
     const guestBtn = document.getElementById('lg-guest');
     if (guestBtn) guestBtn.onclick = () => loginAsGuest(loginGrade);
 
+    $app.querySelectorAll('[data-gen]').forEach(b => b.onclick = () => {
+      wizData.gender = b.dataset.gen;
+      $app.querySelectorAll('[data-gen]').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', String(on)); });
+      const er = document.getElementById('lerr'); if (er) er.textContent = '';
+    });
     const f1 = document.getElementById('lf');
     if (f1) f1.onsubmit = e => {
       e.preventDefault();
@@ -1036,6 +1042,7 @@
       if (name.length < 2) { err.textContent = 'اكتب اسمك (حرفين على الأقل).'; return; }
       const p = findProfile(name, loginGrade);
       if (p) return enterProfile(p);
+      if (!wizData.gender) { err.textContent = 'اختر: طالب أو طالبة.'; return; }
       wizData.name = name;
       wizData.grade = loginGrade;
       wizStep = 2;
@@ -1069,10 +1076,10 @@
         if (!validPin(v1)) { err.textContent = 'الرقم السري يجب أن يكون 4 أرقام.'; return; }
         if (v1 !== v2) { err.textContent = 'الرقمان غير متطابقين.'; wb2.clear(); return; }
         if (weakPin(v1)) { err.textContent = 'هذا الرقم سهل التخمين، اختر رقماً آخر.'; return; }
-        const p = { id: newId(), name: wizData.name, grade: wizData.grade, avatar: wizData.avatar, records: [], wrong: {}, created: Date.now() };
+        const p = { id: newId(), name: wizData.name, grade: wizData.grade, avatar: wizData.avatar, gender: wizData.gender || undefined, genderT: wizData.gender ? Date.now() : undefined, records: [], wrong: {}, created: Date.now() };
         p.pinHash = await hashPin(p.id, v1);
         store.profiles[p.id] = p;
-        wizStep = 1; wizData = { name: '', grade: null, avatar: null }; loginNew = false;
+        wizStep = 1; wizData = { name: '', grade: null, avatar: null, gender: null }; loginNew = false;
         selectProfile(p);
       };
     }
@@ -1081,10 +1088,12 @@
   /* ---------- تعديل ملفي: الصورة والرقم السري ---------- */
   function editProfile() {
     const p = cur(); if (!p) return;
-    let av = p.avatar != null ? p.avatar : null;
+    let av = p.avatar != null ? p.avatar : null, gen = p.gender || null;
     const ov = document.createElement('div'); ov.className = 'overlay';
     ov.innerHTML = `<form class="card edit-card" role="dialog" aria-modal="true" aria-labelledby="ed-t" autocomplete="off">
       <h2 id="ed-t">تعديل ملفي</h2>
+      <h3>أنا</h3>
+      <div class="gen-row" role="radiogroup" aria-label="طالب أو طالبة"><button type="button" role="radio" class="grade-tab gen-b${gen === 'm' ? ' on' : ''}" aria-checked="${gen === 'm'}" data-egen="m">🧑‍🎓 طالب</button><button type="button" role="radio" class="grade-tab gen-b${gen === 'f' ? ' on' : ''}" aria-checked="${gen === 'f'}" data-egen="f">👩‍🎓 طالبة</button></div>
       <h3>صورتي</h3>
       ${avatarGrid(av)}
       <h3>تغيير الرقم السري <small>(اتركه فارغاً إذا لا تريد تغييره)</small></h3>
@@ -1099,6 +1108,7 @@
     </form>`;
     const done = () => ov.remove();
     bindAvatarGrid(ov, i => { av = i; });
+    ov.querySelectorAll('[data-egen]').forEach(b => b.onclick = () => { gen = b.dataset.egen; ov.querySelectorAll('[data-egen]').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', String(on)); }); });
     const e0 = ov.querySelector('#ep0'), e1 = ov.querySelector('#ep1'), e2 = ov.querySelector('#ep2');
     [e0, e1, e2].forEach(digitsOnly);
     const err = ov.querySelector('#ed-err');
@@ -1114,6 +1124,7 @@
         p.pinHash = await hashPin(p.id, e1.value);
       }
       p.avatar = av;
+      if (gen && gen !== p.gender) { p.gender = gen; p.genderT = Date.now(); }
       persist(); updateWho(); done(); route(); toast('تم حفظ ملفك ✓');
     };
     document.body.appendChild(ov);

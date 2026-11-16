@@ -1630,3 +1630,8 @@ tr.sd-quiet td{color:var(--muted)}
 .xe-list li{padding:10px 12px;border-radius:12px;background:var(--chip)}
 .xe-list b,.xe-list small{display:block}
 .xe-list small{color:var(--muted)}
+
+/* ===== طالب / طالبة ===== */
+.gen-row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:4px 0 10px}
+.edit-card .gen-row{justify-content:flex-start}
+.gen-b{min-width:140px}

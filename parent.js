@@ -114,6 +114,8 @@
 
   /* ================= جدول الاختبارات (ولي الأمر يضيف، والطالب يستعرض أو يعدّل حسب الصلاحية) ================= */
   const examPerm = p => p.examPerm === 'edit' ? 'edit' : 'view';
+  // الصياغة حسب «طالب/طالبة» (n: صياغة بديلة إذا لم يُحدَّد، والافتراضي المذكر)
+  const gx = (p, m, f, n) => p && p.gender === 'f' ? f : p && p.gender === 'm' ? m : (n == null ? m : n);
   const inDays = d => d === 0 ? 'اليوم' : d === 1 ? 'غداً' : d === 2 ? 'بعد يومين' : d > 0 ? 'بعد ' + num(d) + (d <= 10 ? ' أيام' : ' يوماً') : d === -1 ? 'أمس' : 'منذ ' + num(-d) + (-d <= 10 ? ' أيام' : ' يوماً');
   function delExam(p, id) {
     p.exams = (p.exams || []).filter(x => x.id !== id);
@@ -130,7 +132,7 @@
       const ready = pl ? (n ? num(n) + ' ' + (n === 1 ? 'درس يحتاج' : n <= 10 ? 'دروس تحتاج' : 'درساً يحتاج') + ' مراجعة' : 'كل الدروس متقنة ✓') : '';
       return `<tr class="${old ? 'old' : d <= 2 ? 'soon' : ''}">
         <td><b>${esc(fdate(e.date))}</b><small>${inDays(d)}</small></td>
-        <td><span class="xs-sub">${s ? s.icon + ' ' + esc(s.name) : 'مادة'}</span>${e.note ? `<small class="xs-note">${esc(e.note)}</small>` : ''}${who === 'parent' && e.by === 'student' ? '<small class="xs-by">أضافه الطالب</small>' : ''}</td>
+        <td><span class="xs-sub">${s ? s.icon + ' ' + esc(s.name) : 'مادة'}</span>${e.note ? `<small class="xs-note">${esc(e.note)}</small>` : ''}${who === 'parent' && e.by === 'student' ? `<small class="xs-by">${gx(p, 'أضافه الطالب', 'أضافته الطالبة')}</small>` : ''}</td>
         <td>${timeTxt(e)}</td>
         <td class="xs-ready">${old ? '—' : `<small>${ready}</small>${pl && pl.level != null ? `<small class="muted">المستوى ${num(pl.level)}٪</small>` : ''}`}</td>
         ${edit ? `<td><button type="button" class="linkish" data-xsdel="${esc(e.id)}" aria-label="حذف اختبار ${s ? esc(s.name) : ''}">حذف</button></td>` : ''}</tr>`;
@@ -138,14 +140,14 @@
     const head = `<thead><tr><th>الموعد</th><th>المادة</th><th>الساعة</th><th>الاستعداد</th>${edit ? '<th><span class="sr">حذف</span></th>' : ''}</tr></thead>`;
     const pv = examPerm(p);
     const perm = who === 'parent' ? `<div class="xs-perm"><span>صلاحية ${fn} على الجدول:</span>
-      <div class="segs" role="group" aria-label="صلاحية الطالب"><button type="button" class="seg${pv === 'view' ? ' on' : ''}" aria-pressed="${pv === 'view'}" data-xsperm="view">👁️ عرض فقط</button><button type="button" class="seg${pv === 'edit' ? ' on' : ''}" aria-pressed="${pv === 'edit'}" data-xsperm="edit">✏️ عرض وتعديل</button></div></div>` : '';
+      <div class="segs" role="group" aria-label="صلاحية ${gx(p, 'الطالب', 'الطالبة')}"><button type="button" class="seg${pv === 'view' ? ' on' : ''}" aria-pressed="${pv === 'view'}" data-xsperm="view">👁️ عرض فقط</button><button type="button" class="seg${pv === 'edit' ? ' on' : ''}" aria-pressed="${pv === 'edit'}" data-xsperm="edit">✏️ عرض وتعديل</button></div></div>` : '';
     const form = edit ? `<form class="px-form xs-form" id="xs-add">
         <label><span>المادة</span><select id="xs-s" required>${subs.map(s => `<option value="${s.id}">${s.icon} ${esc(s.name)}</option>`).join('')}</select></label>
         <label><span>تاريخ الاختبار</span><input type="date" id="xs-d" min="${ymd()}" required></label>
         <label><span>الساعة</span><input type="time" id="xs-t" value="08:00" required></label>
         <label class="wide"><span>الدروس المقررة (اختياري)</span><input id="xs-n" maxlength="80" placeholder="مثال: الوحدة الأولى والثانية"></label>
         <button class="btn" type="submit">إضافة إلى الجدول</button></form>` : '';
-    const sub = who === 'parent' ? `يظهر لـ${fn} في صفحته مع عدّاد تنازلي وخطة مراجعة يومية للدروس التي لم يتقنها`
+    const sub = who === 'parent' ? `يظهر لـ${fn} في ${gx(p, 'صفحته', 'صفحتها')} مع عدّاد تنازلي وخطة مراجعة يومية للدروس التي لم ${gx(p, 'يتقنها', 'تتقنها')}`
       : edit ? 'يمكنك إضافة مواعيد اختباراتك وتعديلها' : 'يضيف ولي أمرك مواعيد اختباراتك هنا، وتظهر لك خطة مراجعة لكل اختبار';
     return `<section class="card px-card xs-card">
       <div class="xs-head"><div><h2>📅 جدول الاختبارات</h2><small class="muted">${sub}</small></div>
@@ -161,7 +163,7 @@
     const NQ = N(), edit = who === 'parent' || examPerm(p) === 'edit';
     if (who === 'parent') document.querySelectorAll('[data-xsperm]').forEach(b => b.onclick = () => {
       p.examPerm = b.dataset.xsperm; p.examPermT = Date.now(); NQ.persist();
-      NQ.toast(p.examPerm === 'edit' ? 'أصبح بإمكان الطالب تعديل الجدول ✓' : 'الطالب يستعرض الجدول فقط ✓'); rerender();
+      NQ.toast(p.examPerm === 'edit' ? `أصبح بإمكان ${gx(p, 'الطالب', 'الطالبة')} تعديل الجدول ✓` : `${gx(p, 'الطالب يستعرض', 'الطالبة تستعرض')} الجدول فقط ✓`); rerender();
     });
     if (!edit) return;
     const f = document.getElementById('xs-add');
@@ -198,8 +200,8 @@
       d, s, pl,
       title: d === 1 ? `غداً اختبار ${name}` : `اليوم اختبار ${name}`,
       when: 'الساعة ' + timeTxt(e) + (e.note ? ' · ' + e.note : ''),
-      tip: d === 1 ? (n ? `باقي ${num(n)} ${n === 1 ? 'درس يحتاج' : n <= 10 ? 'دروس تحتاج' : 'درساً يحتاج'} مراجعة، راجعها اليوم ونم مبكراً 💪` : 'راجعت كل الدروس 👏 مراجعة خفيفة اليوم ثم نوم مبكر')
-        : 'بالتوفيق! 🍀 راجع أخطاءك بسرعة قبل الاختبار'
+      tip: d === 1 ? (n ? `باقي ${num(n)} ${n === 1 ? 'درس يحتاج' : n <= 10 ? 'دروس تحتاج' : 'درساً يحتاج'} مراجعة، ${gx(p, 'راجعها اليوم ونم مبكراً', 'راجعيها اليوم ونامي مبكراً')} 💪` : 'راجعت كل الدروس 👏 مراجعة خفيفة اليوم ثم نوم مبكر')
+        : `بالتوفيق! 🍀 ${gx(p, 'راجع', 'راجعي')} أخطاءك بسرعة قبل الاختبار`
     };
   };
   const notifOk = () => 'Notification' in window && window.isSecureContext;
@@ -210,7 +212,7 @@
       return `<section class="xe-alert${x.d === 0 ? ' today' : ''}" role="alert">
         <span class="xe-ic" aria-hidden="true">${x.d === 1 ? '⏰' : '🍀'}</span>
         <div class="xe-body"><b>${esc(x.title)}</b><small>${esc(x.when)}</small><p>${x.tip}</p>
-          <div class="xe-acts">${first ? `<button type="button" class="btn small" data-plan="${x.s.id}|${first.key}">ابدأ المراجعة ←</button>` : ''}<a class="btn ghost small" href="#exams">جدول الاختبارات</a>
+          <div class="xe-acts">${first ? `<button type="button" class="btn small" data-plan="${x.s.id}|${first.key}">${gx(p, 'ابدأ', 'ابدئي')} المراجعة ←</button>` : ''}<a class="btn ghost small" href="#exams">جدول الاختبارات</a>
           ${notifOk() && Notification.permission === 'default' ? '<button type="button" class="linkish" data-xenotif>🔔 نبّهني على هذا الجهاز</button>' : ''}</div></div></section>`;
     }).join('');
   }
@@ -257,8 +259,8 @@
       return Object.assign(x, {
         p, e, fn,
         ptitle: x.d === 1 ? `غداً اختبار ${name} لـ${fn}` : `اليوم اختبار ${name} لـ${fn}`,
-        ptip: x.d === 1 ? (n ? `باقي ${num(n)} ${n === 1 ? 'درس يحتاج' : n <= 10 ? 'دروس تحتاج' : 'درساً يحتاج'} مراجعة. ذكّر ${fn} بالمراجعة الليلة، وكلمة تشجيع تصنع فرقاً 💪` : `كل الدروس متقنة 👏 تكفي مراجعة خفيفة الليلة ونوم مبكر`)
-          : `ادعُ لـ${fn} بالتوفيق 🍀 ورسالة تشجيع قصيرة تصنع فرقاً`
+        ptip: x.d === 1 ? (n ? `باقي ${num(n)} ${n === 1 ? 'درس يحتاج' : n <= 10 ? 'دروس تحتاج' : 'درساً يحتاج'} مراجعة. ${gx(p, `ذكّره بالمراجعة الليلة وشجّعه`, `ذكّرها بالمراجعة الليلة وشجّعها`, `ذكّر ${fn} بالمراجعة الليلة، وكلمة تشجيع تصنع فرقاً`)} 💪` : `كل الدروس متقنة 👏 تكفي مراجعة خفيفة الليلة ونوم مبكر`)
+          : `${gx(p, 'ادعُ له', 'ادعُ لها', 'ادعُ لـ' + fn)} بالتوفيق 🍀 ورسالة تشجيع قصيرة تصنع فرقاً`
       });
     }));
   }
@@ -815,6 +817,7 @@
     if (src.srs) { t.srs = t.srs || {}; Object.entries(src.srs).forEach(([id, e]) => { const m = t.srs[id]; if (!m || (e && e.d > m.d)) t.srs[id] = e; }); }
     if (t.msg && src.msg && src.msg.t === t.msg.t && src.msg.seen && !t.msg.seen) { t.msg.seen = src.msg.seen; if (src.msg.re) t.msg.re = src.msg.re; }
     if (t.msg && src.msg && src.msg.t > t.msg.t) t.msg = src.msg;
+    if (src.gender && src.genderT && !(t.genderT >= src.genderT)) { t.gender = src.gender; t.genderT = src.genderT; }
     if (src.examPermT && !(t.examPermT >= src.examPermT)) { t.examPerm = src.examPerm; t.examPermT = src.examPermT; }
     if (src.examsDel) t.examsDel = [...new Set([...(t.examsDel || []), ...src.examsDel])].slice(-150);
     ['tasks', 'exams', 'routines'].forEach(k => {
