@@ -796,6 +796,7 @@
           <div class="pr-sw">${k.strong ? `<div><span>الأقوى: ${esc(k.strong.s.name)}</span><b style="color:${lvlColor(k.strong.st.level)}">${num(k.strong.st.level)}٪</b></div>` : '<div><span class="muted">لم يبدأ أي مادة بعد</span></div>'}
             ${k.weak ? `<div><span>الأضعف: ${esc(k.weak.s.name)}</span><b style="color:${lvlColor(k.weak.st.level)}">${num(k.weak.st.level)}٪</b></div>` : ''}</div>
           <button type="button" class="btn ${need ? '' : 'ghost'} pr-open" data-kid="${p.id}">التقرير الكامل</button>
+          <button type="button" class="linkish pr-rm" data-rmkid="${p.id}" aria-label="إزالة ${esc(p.name)} من الحساب">إزالة من الحساب</button>
         </article>`;
       }).join('')}</section>` : '<p class="empty">لا يوجد طلاب بعد. يسجّل كل طالب من شاشة الدخول.</p>'}
       ${sums.some(x => (x.p.rewards || []).length) ? `<section class="card"><h2>المكافآت القادمة</h2><div class="pr-rw-grid">${sums.flatMap(({ p, k }) => (p.rewards || []).filter(r => !r.given).map(r => `<div><div class="pg-row sm"><b>${esc(firstName(p.name))} · ${esc(r.text)}</b><small class="${r.done ? 'pr-up' : 'muted'}">${r.done ? 'تحققت' : num(Math.min(100, Math.round(k.xp / r.xp * 100))) + '٪'}</small></div>
@@ -809,6 +810,7 @@
     const nx = document.getElementById('px-new-x'); if (nx) nx.onclick = () => { newHidden = true; renderParent(); };
     if (window.NQSchools) window.NQSchools.bindParent(people, () => renderParent());
     app.querySelectorAll('[data-kid]').forEach(b => b.onclick = () => { parentKid = b.dataset.kid; parentTab = 'overview'; renderParent(); window.scrollTo(0, 0); });
+    app.querySelectorAll('[data-rmkid]').forEach(b => b.onclick = () => { const p = NQ.store.profiles[b.dataset.rmkid]; if (p) removeKid(p, () => renderParent()); });
     app.querySelectorAll('[data-give]').forEach(b => b.onclick = () => {
       const [pid, rid] = b.dataset.give.split('|'), r = (NQ.store.profiles[pid].rewards || []).find(x => x.id === rid);
       if (r) { r.given = Date.now(); NQ.persist(); NQ.toast('تم تسجيل تسليم المكافأة ✓'); renderParent(); }
@@ -933,10 +935,18 @@
       if (!(await NQ.ask(`إعادة تعيين الرقم السري لـ "${p.name}"؟ سيختار رقماً جديداً عند دخوله التالي، ودرجاته تبقى كما هي.`, 'إعادة التعيين'))) return;
       delete p.pinHash; NQ.persist(); NQ.toast('تمت إعادة التعيين ✓'); rerender();
     };
-    document.getElementById('pdel').onclick = async () => {
-      if (!(await NQ.ask(`حذف "${p.name}" وكل درجاته نهائياً؟ لا يمكن التراجع.`, 'حذف', true))) return;
-      const st = NQ.store; if (window.NQFamily) window.NQFamily.forget(p.id); delete st.profiles[p.id]; if (st.current === p.id) st.current = null; parentKid = null; NQ.persist(); scheduleSync(); rerender();
-    };
+    document.getElementById('pdel').onclick = () => removeKid(p, rerender);
+  }
+
+  // إزالة طالب من حساب ولي الأمر: يُحذف ملفه من الأسرة على كل الأجهزة ويُلغى انضمامه لفصوله
+  async function removeKid(p, after) {
+    const NQ = N(), fem = p.gender === 'f';
+    if (!(await NQ.ask(`إزالة "${p.name}" من حسابك؟ سيُحذف ${fem ? 'ملفها ودرجاتها' : 'ملفه ودرجاته'} من كل الأجهزة المرتبطة بالأسرة، ويُلغى ${fem ? 'انضمامها' : 'انضمامه'} لأي فصل. لا يمكن التراجع.`, 'إزالة', true))) return;
+    if (window.NQSchools && window.NQSchools.leaveAll) await window.NQSchools.leaveAll(p);
+    const st = NQ.store; if (window.NQFamily) window.NQFamily.forget(p.id);
+    delete st.profiles[p.id]; if (st.current === p.id) st.current = null;
+    if (parentKid === p.id) parentKid = null;
+    NQ.persist(); scheduleSync(); NQ.toast(`تمت إزالة ${firstName(p.name)} ✓`); after();
   }
 
   /* ================= احتفال ================= */

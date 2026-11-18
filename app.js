@@ -1021,6 +1021,8 @@
       const p = store.profiles[b.dataset.del];
       if (p.pinHash && !(await pinPrompt(p, 'لحذف "' + p.name + '" اكتب رقمه السري'))) return;
       if (!(await ask(`سيتم حذف "${p.name}" وكل درجاته وأخطائه نهائياً. هل أنت متأكد؟`, 'حذف الطالب', true))) return;
+      if (window.NQSchools && window.NQSchools.leaveAll) await window.NQSchools.leaveAll(p);
+      if (window.NQFamily) window.NQFamily.forget(p.id); // حتى لا يعود من حساب الأسرة عند المزامنة التالية
       delete store.profiles[p.id];
       if (store.current === p.id) store.current = null;
       if (!Object.keys(store.profiles).length) loginManage = false;

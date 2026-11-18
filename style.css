@@ -677,6 +677,8 @@ main:has(> .pr-page){max-width:1240px}
 .pr-sw{display:flex;flex-direction:column;gap:4px;font-size:.92rem}
 .pr-sw div{display:flex;justify-content:space-between;gap:8px}
 .pr-open{margin-top:auto;justify-content:center}
+.pr-rm{align-self:center;margin-top:-6px;font-size:.85rem;color:var(--muted)}
+.pr-rm:hover,.pr-rm:focus-visible{color:var(--bad)}
 .pr-rw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
 .pr-shell .sb-a .av{width:34px;height:34px;font-size:1.1rem;flex:none}
 .pr-shell .sb-a span small{display:block;color:var(--muted);font-size:.75rem;font-weight:600}

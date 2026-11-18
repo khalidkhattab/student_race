@@ -90,6 +90,8 @@
       const meta = { v: 2, parent: body.parent || (remote && remote.parent) || null, kids: ids, removed: removed.slice(-200), updated: Date.now() };
       const ms = JSON.stringify([meta.parent, meta.kids, meta.removed]);
       if (!remote || JSON.stringify([remote.parent || null, remote.kids || [], remote.removed || []]) !== ms) await putDoc(c, meta);
+      // ملف الطالب المحذوف نفسه يُمسح من السحابة (أفضل جهد: قائمة removed تمنع ظهوره حتى لو فشل المسح)
+      for (const id of forgotten) { try { await delRaw('families/' + c + '/kids/' + encodeURIComponent(id)); } catch (e) { } delete written[c + '/' + id]; }
       written[c] = ms; forgotten.clear();
       lastSync = Date.now(); lastErr = null;
     } catch (e) { lastErr = e; if (!pendingBody && pendingCode === c) pendingBody = body; schedule(15000); }

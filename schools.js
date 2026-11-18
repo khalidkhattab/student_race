@@ -834,6 +834,12 @@
     });
   }
 
+  // عند إزالة الطالب من حساب ولي الأمر: نحذف نسخته من كل فصوله (أفضل جهد، دون إيقاف الإزالة عند الخطأ)
+  async function leaveAll(p) {
+    if (!enabled()) return;
+    for (const m of activeMems(p)) { try { await db.del('classes/' + m.cid + '/students/' + m.doc); m.left = Date.now(); m.t = Date.now(); } catch (e) { } }
+  }
+
   /* ----- مشاركة درجات الطالب مع معلمه: المواد المسموحة فقط ----- */
   const sent = {};
   function shareable(p, m) {
@@ -922,5 +928,5 @@
     return false;
   }
 
-  window.NQSchools = { enabled, route, parentHtml, bindParent, onPersist, merge, primary, stageOf, classTasks, studentHtml, bindStudent, REGIONS, STAGES, ALL_GRADES, _db: db, auth, signedUser, provider, providers, providerBtns, authErr };
+  window.NQSchools = { enabled, route, parentHtml, bindParent, onPersist, merge, primary, stageOf, classTasks, studentHtml, bindStudent, leaveAll, REGIONS, STAGES, ALL_GRADES, _db: db, auth, signedUser, provider, providers, providerBtns, authErr };
 })();
