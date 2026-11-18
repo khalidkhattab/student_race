@@ -54,7 +54,14 @@
           Q('Grammar', 'Choose the correct inversion: "Hardly ___ the house when it started to rain."', 'had I left', 'I had left', 'did I left', 'I left'),
           Q('Grammar', 'No sooner ___ arrived than the meeting began.', 'had she', 'she had', 'has she', 'did she'),
           Q('Grammar', 'The past perfect is used for:', 'an action that happened before another past action', 'a habit in the present', 'a future plan', 'an action happening now'),
-          Q('Grammar', 'Scarcely had he sat down ___ the phone rang.', 'when', 'than', 'then', 'that')
+          Q('Grammar', 'Scarcely had he sat down ___ the phone rang.', 'when', 'than', 'then', 'that'),
+          Q('Reading', 'Which of these is an example of a regular family gathering?', 'a diwaniya or a family visit', 'a football match', 'a business meeting', 'a school exam'),
+          Q('Reading', 'Why are regular family gatherings important?', 'to catch up, discuss family issues, share feelings and strengthen relationships', 'to sell things to relatives', 'to avoid talking to each other', 'to plan holidays abroad only'),
+          Q('Reading', 'Family celebrations are important because they:', 'show support, strengthen relationships and make events memorable', 'cost a lot of money', 'replace school', 'are only for children'),
+          Q('Reading', 'To prepare for a celebration, we should first:', 'pick a suitable time and place and decide on the guests', 'buy a new car', 'cancel all plans', 'invite strangers only'),
+          Q('Reading', 'A baby shower is a celebration of:', 'welcoming the baby and the parents to parenthood', 'a graduation', 'a wedding anniversary', 'a birthday'),
+          Q('Reading', 'Which gift is suitable for a baby shower?', 'a pram', 'a laptop', 'a car', 'a suit'),
+          M('Reading', 'Which of these are examples of celebrations?', ['birthdays', 'weddings', 'graduations'], ['quarrels', 'traffic jams'])
         ]),
         L1('l3', 'Unit 3: Meeting Places', 'Meeting Places', [
           Q('Vocabulary', '"Hospitality" means:', 'welcoming and generous treatment of guests', 'a hospital', 'a quarrel', 'a bill'),
@@ -68,7 +75,14 @@
           Q('Grammar', 'If I had more time, I ___ more books.', 'would read', 'will read', 'read', 'had read'),
           Q('Grammar', 'If you heat ice, it ___.', 'melts', 'will melted', 'would melt', 'melted'),
           Q('Grammar', 'If she had studied, she ___ the exam.', 'would have passed', 'will pass', 'would pass', 'passed'),
-          C('Grammar', 'Match each sentence with its conditional type:', ['Zero', 'First', 'Second', 'Third'], [['If you heat water to 100°C, it boils.', 0], ['If I see him, I will tell him.', 1], ['If I were rich, I would travel.', 2], ['If I had known, I would have helped.', 3]])
+          C('Grammar', 'Match each sentence with its conditional type:', ['Zero', 'First', 'Second', 'Third'], [['If you heat water to 100°C, it boils.', 0], ['If I see him, I will tell him.', 1], ['If I were rich, I would travel.', 2], ['If I had known, I would have helped.', 3]]),
+          Q('Reading', 'Why do politicians visit diwaniyas?', 'to talk about their campaigns and programmes', 'to buy coffee beans', 'to play games', 'to sell houses'),
+          Q('Reading', 'In the past, who used to go to traditional coffee houses?', 'businessmen, writers and politicians', 'only children', 'only tourists', 'only women'),
+          Q('Reading', 'What does coffee represent to Kuwaitis?', 'a symbol of hospitality', 'a medicine', 'a luxury for kings only', 'a sign of anger'),
+          Q('Reading', 'Why is tea a popular drink?', 'because it helps people relax', 'because it is very expensive', 'because it is cold', 'because it has no taste'),
+          Q('Reading', 'In a Kuwaiti home, the host stops refilling the guest’s coffee cup when the guest:', 'tips the empty cup from side to side', 'puts the cup on the floor', 'asks for water', 'stands up'),
+          Q('Reading', 'Kuwaiti coffee gets its distinctive fragrance from:', 'cardamom seeds ground with the beans', 'milk and sugar', 'chocolate', 'lemon'),
+          Q('Reading', 'Why has coffee spread quickly throughout the world?', 'people loved its taste and the energy it gives', 'it is free everywhere', 'it grows in every country', 'doctors banned tea')
         ])
       ]
     },
@@ -91,7 +105,16 @@
           Q('Grammar', 'How ___ books did you read?', 'many', 'much', 'little', 'a little'),
           Q('Grammar', 'There is ___ milk left; we need to buy more.', 'little', 'few', 'many', 'a few'),
           Q('Grammar', 'I stayed at home ___ it was raining.', 'because', 'although', 'unless', 'but'),
-          Q('Grammar', '___ he was tired, he finished his work.', 'Although', 'Because', 'So', 'Unless')
+          Q('Grammar', '___ he was tired, he finished his work.', 'Although', 'Because', 'So', 'Unless'),
+          Q('Reading', 'In the past, people communicated using:', 'pigeons, fire, bottles and letters', 'social media and text messages', 'video calls', 'emails'),
+          Q('Reading', 'Compared with the past, communication nowadays is:', 'instant and less expensive', 'slower and more expensive', 'impossible', 'only by letters'),
+          Q('Reading', 'Why do people communicate?', 'to share ideas and feelings, pass information, get business done and solve problems', 'only to argue', 'to waste time', 'to avoid others'),
+          Q('Reading', 'To communicate effectively, you should:', 'listen carefully, keep eye contact and never interrupt', 'interrupt often and judge quickly', 'look at your watch', 'give too much information'),
+          M('Reading', 'Which things hinder communication?', ['assumptions', 'yawning or looking at your watch', 'passive listening', 'being defensive'], ['keeping eye contact', 'listening with empathy']),
+          Q('Reading', 'According to the text, a major source of communication problems is:', 'defensiveness', 'empathy', 'eye contact', 'paraphrasing'),
+          Q('Reading', 'Being a good and patient listener helps you to:', 'see the world through the eyes of others and increase empathy', 'win every argument', 'talk more than others', 'avoid people'),
+          Q('Reading', 'A good listener should be:', 'trustworthy, a secret-keeper and compassionate', 'judgmental and impatient', 'controlling', 'silent and uninterested'),
+          Q('Reading', 'The proverb "Listen or your tongue will keep you deaf" means:', 'if you talk too much you will never learn from others', 'talking makes you deaf', 'never speak at all', 'listening is harmful')
         ]),
         L2('l2', 'Unit 5: Writing', 'Writing', [
           Q('Vocabulary', 'The ancient wedge-shaped writing system of Mesopotamia is:', 'cuneiform', 'hieroglyphics', 'ballpoint', 'calligraphy'),
@@ -105,7 +128,15 @@
           Q('Grammar', 'They have lived here ___ 2015.', 'since', 'for', 'ago', 'yet'),
           Q('Grammar', 'He has worked here ___ ten years.', 'for', 'since', 'ago', 'already'),
           Q('Grammar', 'Have you finished your homework ___?', 'yet', 'already', 'since', 'ago'),
-          Q('Grammar', 'The Present Perfect Continuous is formed with:', 'have/has been + verb-ing', 'had + V3', 'have/has + V3', 'was/were + verb-ing')
+          Q('Grammar', 'The Present Perfect Continuous is formed with:', 'have/has been + verb-ing', 'had + V3', 'have/has + V3', 'was/were + verb-ing'),
+          Q('Reading', 'Writing is a way of communicating that was developed:', 'by ancient people thousands of years ago', 'in the last century', 'by computers', 'by the Romans only'),
+          Q('Reading', 'Pictograms were used because:', 'letters had not yet been invented', 'paper was cheap', 'people could not see well', 'they were faster than letters'),
+          Q('Reading', 'How many letters does the Arabic alphabet have?', '28', '26', '24', '30'),
+          Q('Reading', 'Arabic is written:', 'from right to left', 'from left to right', 'from top to bottom', 'in circles'),
+          Q('Reading', 'The Arabic alphabet is the ___ most widely used alphabet in the world.', 'second', 'first', 'third', 'fifth'),
+          Q('Reading', 'People have been using the written form of Arabic since:', 'the 4th century CE', 'the 20th century', 'the 10th century BCE', 'last year'),
+          M('Reading', 'The Arabic script is also the basis of:', ['Malay (Jawi)', 'Urdu', 'Turkish (old script)'], ['English', 'Chinese']),
+          Q('Reading', 'Writing is more useful than speaking because:', 'you can keep information longer and revise it before sending', 'it is always faster', 'nobody can read it', 'it needs no tools')
         ]),
         L2('l3', 'Unit 6: On the Phone', 'On the Phone', [
           Q('Vocabulary', 'To look through information on the internet is to:', 'browse', 'paste', 'press', 'hike'),
@@ -120,7 +151,11 @@
           Q('Grammar', 'I am late, ___?', "aren't I", "am not I", "isn't I", 'am I'),
           Q('Grammar', "Let's go to the park, ___?", 'shall we', "don't we", 'will you', "won't we"),
           Q('Grammar', 'Choose the imperative sentence:', 'Close the door, please.', 'She closes the door.', 'Did you close the door?', 'The door is closed.'),
-          Q('Grammar', 'The negative imperative of "Touch the wire" is:', "Don't touch the wire.", 'Not touch the wire.', "Doesn't touch the wire.", 'Not to touch the wire.')
+          Q('Grammar', 'The negative imperative of "Touch the wire" is:', "Don't touch the wire.", 'Not touch the wire.', "Doesn't touch the wire.", 'Not to touch the wire.'),
+          Q('Reading', 'Phones are important because they help us to:', 'call for help in emergencies and communicate instantly', 'stop meeting people', 'waste money', 'avoid work'),
+          M('Reading', 'Which are uses of mobile phones mentioned in the text?', ['scheduling appointments', 'checking emails', 'taking pictures', 'writing notes'], ['cooking food', 'driving cars']),
+          Q('Reading', 'A disadvantage of phones is that some games and applications:', 'consume time and money and can make people anti-social', 'make people healthier', 'are always free', 'improve sleep'),
+          Q('Reading', 'Before replacing an old phone with a new one, we should:', 'format it, then sell or recycle it', 'throw it in the sea', 'give it away with our data on it', 'break it')
         ])
       ]
     }
