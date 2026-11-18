@@ -71,7 +71,7 @@
       <span class="lp-badge"><svg aria-hidden="true" width="22" height="14" viewBox="0 0 30 20"><rect width="30" height="20" rx="3" fill="#fff"/><rect width="30" height="6.7" fill="#007a3d"/><rect y="13.3" width="30" height="6.7" fill="#ce1126"/><path d="M0 0l9 6.7v6.6L0 20z" fill="#10233f"/></svg>المنهج الكويتي <span class="dot">•</span> مجاني</span>
       <h1>رحلتك إلى <span class="hl">القمّة</span><br>تبدأ هنا</h1>
       <p class="lp-lead">راجع دروسك، أتقن أخطاءك، ونافس زملاءك</p>
-      <p class="lp-count"><span></span>أكثر من ${ar(Math.floor(CAT.total / 100) * 100 || 2000)} سؤال للصف السادس والثامن والعاشر<span></span></p>
+      <p class="lp-count"><span></span>أكثر من ${ar(Math.floor(CAT.total / 100) * 100 || 2000)} سؤال للصف السادس والثامن والعاشر والحادي عشر علمي<span></span></p>
       <div class="lp-ctas">
         <a href="#login" class="lp-btn primary">${ICON.trophy}ابدأ رحلتك مجاناً</a>
         <a href="#staff" class="lp-btn ghost">${ICON.school}للمعلمين والمدارس</a>
@@ -194,7 +194,7 @@
   }
 
   window.WELCOME_INIT = function (root) {
-    const grades = (window.NQ_GRADES && window.NQ_GRADES.length) ? window.NQ_GRADES : ['الصف السادس', 'الصف الثامن', 'الصف العاشر'];
+    const grades = (window.NQ_GRADES && window.NQ_GRADES.length) ? window.NQ_GRADES : ['الصف السادس', 'الصف الثامن', 'الصف العاشر', 'الصف الحادي عشر علمي'];
     const remembered = [lget(KEY_G), lget('nq_grade')].find(g => g && grades.includes(g)) || null;
     const st = { grade: null, qs: [], qi: 0, picked: null, score: 0, loading: false };
     const body = root.querySelector('#lp-quiz-body'), tag = root.querySelector('#lp-grade-tag');

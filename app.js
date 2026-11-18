@@ -7,7 +7,7 @@
 
   const SUBJECTS = window.SUBJECTS || [];
   /* الصفوف تُستخرج من حقل grade في ملفات المواد، مرتبة من الأصغر للأكبر */
-  const GRADE_ORDER = ['الصف الأول', 'الصف الثاني', 'الصف الثالث', 'الصف الرابع', 'الصف الخامس', 'الصف السادس', 'الصف السابع', 'الصف الثامن', 'الصف التاسع', 'الصف العاشر', 'الصف الحادي عشر', 'الصف الثاني عشر'];
+  const GRADE_ORDER = ['الصف الأول', 'الصف الثاني', 'الصف الثالث', 'الصف الرابع', 'الصف الخامس', 'الصف السادس', 'الصف السابع', 'الصف الثامن', 'الصف التاسع', 'الصف العاشر', 'الصف الحادي عشر', 'الصف الحادي عشر علمي', 'الصف الثاني عشر'];
   const GRADES = (window.NQ_GRADES || [...new Set(SUBJECTS.map(s => s.grade))]).slice().sort((a, b) => GRADE_ORDER.indexOf(a) - GRADE_ORDER.indexOf(b));
   const KEY_GRADE = 'nq_grade';
   let curGrade = (() => { try { const g = localStorage.getItem(KEY_GRADE); return GRADES.includes(g) ? g : GRADES[0]; } catch (e) { return GRADES[0]; } })();
