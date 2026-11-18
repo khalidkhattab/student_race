@@ -7,7 +7,7 @@
     'الصف العاشر': ['physics-10.js', 'chemistry-10.js', 'biology-10.js', 'math-10.js', 'arabic-10.js', 'english-10.js', 'islamic-10.js', 'quran-10.js', 'kuwait-10.js', 'explain-10.js', 'extra-10.js'],
     'الصف الحادي عشر علمي': ['physics-11s.js', 'chemistry-11s.js', 'biology-11s.js', 'geology-11s.js', 'math-11s.js', 'arabic-11s.js', 'english-11s.js', 'islamic-11s.js', 'quran-11s.js']
   };
-  const V = '20261119a';
+  const V = '20261119b';
   window.NQ_GRADES = Object.keys(GRADE_FILES);
   const add = src => new Promise((res, rej) => {
     const s = document.createElement('script'); s.src = src + '?v=' + V; s.async = false;
